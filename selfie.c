@@ -634,6 +634,8 @@ int FCT_DIVU    = 27;
 int FCT_ADDU    = 33;
 int FCT_SUBU    = 35;
 int FCT_SLT     = 42;
+int FCT_SLL     = 0;   // TODO: Ask about NOP instruction (which is usually interpreted as sll $0, $0, 0) 
+int FCT_SLLV    = 4;
 
 int *FUNCTIONS; // array of strings representing MIPS functions
 
@@ -673,6 +675,7 @@ void initDecoder() {
     *(FUNCTIONS + FCT_ADDU)    = (int) "addu";
     *(FUNCTIONS + FCT_SUBU)    = (int) "subu";
     *(FUNCTIONS + FCT_SLT)     = (int) "slt";
+    *(FUNCTIONS + FCT_SLLV)    = (int) "sllv";
 }
 
 // -----------------------------------------------------------------
@@ -890,6 +893,7 @@ void fct_subu();
 void op_lw();
 void fct_slt();
 void op_sw();
+void fct_sllv();
 
 // -----------------------------------------------------------------
 // -------------------------- INTERPRETER --------------------------
@@ -5390,6 +5394,48 @@ void fct_addu() {
 
     if (interpret) {
         *(registers+rd) = *(registers+rs) + *(registers+rt);
+
+        pc = pc + WORDSIZE;
+    }
+
+    if (debug) {
+        if (interpret) {
+            print((int*) " -> ");
+            printRegister(rd);
+            print((int*) "=");
+            print(itoa(*(registers+rd), string_buffer, 10, 0, 0));
+        }
+        println();
+    }
+}
+
+void fct_sllv() {
+    if (debug) {
+        printFunction(function);
+        print((int*) " ");
+        printRegister(rd);
+        print((int*) ",");
+        printRegister(rs);
+        print((int*) ",");
+        printRegister(rt);
+        if (interpret) {
+            print((int*) ": ");
+            printRegister(rd);
+            print((int*) "=");
+            print(itoa(*(registers+rd), string_buffer, 10, 0, 0));
+            print((int*) ",");
+            printRegister(rs);
+            print((int*) "=");
+            print(itoa(*(registers+rs), string_buffer, 10, 0, 0));
+            print((int*) ",");
+            printRegister(rt);
+            print((int*) "=");
+            print(itoa(*(registers+rt), string_buffer, 10, 0, 0));
+        }
+    }
+
+    if (interpret) {
+        *(registers+rd) = leftShift(*(registers+rs), *(registers+rt));
 
         pc = pc + WORDSIZE;
     }
