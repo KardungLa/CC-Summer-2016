@@ -18,5 +18,9 @@ debug:
 
 selftest: 
 	clang -w -m32 -D'main(a, b)=main(int argc, char **argv)' selfie.c -o selfie -g && ./selfie -c selfie.c -o selfie.mips32
+
 warnings:
 	clang -Wall -m32 -D'main(a, b)=main(int argc, char**argv)' selfie.c -o selfie
+
+emulate:
+	./selfie -c selfie.c -d 12
