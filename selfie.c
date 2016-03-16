@@ -3797,7 +3797,7 @@ void decode() {
 // 32 bit
 //
 // +------+-----+-----+-----+-----+------+
-// |opcode|  rs |  rt |  rd |00000|fction|
+// |opcode|  rs |  rt |  rd |shamt|fction| shamt is decoded to immediate
 // +------+-----+-----+-----+-----+------+
 //    6      5     5     5     5     6
 void decodeRFormat() {
