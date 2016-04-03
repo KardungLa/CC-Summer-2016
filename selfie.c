@@ -5463,7 +5463,7 @@ void fct_sllv() {
     }
 
     if (interpret) {
-        *(registers+rd) = leftShift(*(registers+rs), *(registers+rt));
+        *(registers+rd) = leftShift(*(registers+rt), *(registers+rs));
 
         pc = pc + WORDSIZE;
     }
@@ -5589,7 +5589,7 @@ void fct_srlv() {
     }
 
     if (interpret) {
-        *(registers+rd) = rightShift(*(registers+rs), *(registers+rt));
+        *(registers+rd) = rightShift(*(registers+rt), *(registers+rs));
 
         pc = pc + WORDSIZE;
     }
