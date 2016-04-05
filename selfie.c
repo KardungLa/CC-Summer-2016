@@ -429,6 +429,7 @@ int isLiteral();
 int isStarOrDivOrModulo();
 int isPlusOrMinus();
 int isComparison();
+int isShiftOperator();
 
 int lookForFactor();
 int lookForStatement();
@@ -2092,6 +2093,15 @@ int isPlusOrMinus() {
     if (symbol == SYM_MINUS)
         return 1;
     else if (symbol == SYM_PLUS)
+        return 1;
+    else
+        return 0;
+}
+
+int isShiftOperator() {
+    if (symbol == SYM_SL)
+        return 1;
+    else if (symbol == SYM_SR)
         return 1;
     else
         return 0;
