@@ -270,6 +270,7 @@ int SYM_MOD          = 25; // %
 int SYM_CHARACTER    = 26; // character
 int SYM_STRING       = 27; // string
 int SYM_SL           = 28; // <<
+int SYM_SR           = 29; // >>
 
 int *SYMBOLS; // array of strings representing symbols
 
@@ -301,7 +302,7 @@ int sourceFD    = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner () {
-    SYMBOLS = malloc(29 * SIZEOFINTSTAR);
+    SYMBOLS = malloc(30 * SIZEOFINTSTAR);
 
     *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
     *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -332,6 +333,7 @@ void initScanner () {
     *(SYMBOLS + SYM_CHARACTER)    = (int) "character";
     *(SYMBOLS + SYM_STRING)       = (int) "string";
     *(SYMBOLS + SYM_SL)           = (int) "<<";
+    *(SYMBOLS + SYM_SR)           = (int) ">>";
 
     character = CHAR_EOF;
     symbol    = SYM_EOF;
@@ -429,6 +431,7 @@ int isLiteral();
 int isStarOrDivOrModulo();
 int isPlusOrMinus();
 int isComparison();
+
 
 int lookForFactor();
 int lookForStatement();
@@ -1901,6 +1904,10 @@ int getSymbol() {
             getCharacter();
 
             symbol = SYM_GEQ;
+	} else if (character == CHAR_GT) {
+		getCharacter();
+
+		symbol = SYM_SR;
         } else
             symbol = SYM_GT;
 
@@ -2784,13 +2791,49 @@ int gr_simpleExpression() {
     return ltype;
 }
 
-int gr_expression() {
+int gr_shiftExpression() {
     int ltype;
     int operatorSymbol;
     int rtype;
 
     // assert: n = allocatedTemporaries
 
+    ltype = gr_term();
+
+    // assert: allocatedTemporaries == n + 1
+
+    // << or >>
+    while (isShiftOperator()) {
+        operatorSymbol = symbol;
+
+        getSymbol();
+
+        rtype = gr_term();
+
+        // assert: allocatedTemporaries == n + 2
+
+        if (operatorSymbol == SYM_SL) {
+            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLLV);
+        } else if (operatorSymbol == SYM_SR) {
+            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SRLV);
+        }
+
+        tfree(1);
+    }
+
+    // assert: allocatedTemporaries == n + 1
+
+    return ltype;
+}
+
+int gr_expression() {
+    int ltype;
+    int operatorSymbol;
+    int rtype;
+
+    // assert: n = allocatedTemporaries
+    if (ltype == gr_shiftExpression()) {
+    } else {    
     ltype = gr_simpleExpression();
 
     // assert: allocatedTemporaries == n + 1
@@ -2865,7 +2908,7 @@ int gr_expression() {
             emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
         }
     }
-    
+    } 
     // assert: allocatedTemporaries == n + 1
 
     return ltype;
