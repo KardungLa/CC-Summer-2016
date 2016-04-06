@@ -459,6 +459,7 @@ int  gr_call(int *procedure);
 int  gr_factor();
 int  gr_term();
 int  gr_simpleExpression();
+int  gr_shiftExpression();
 int  gr_expression();
 void gr_while();
 void gr_if();
@@ -2808,7 +2809,7 @@ int gr_shiftExpression() {
 
     // assert: n = allocatedTemporaries
 
-    ltype = gr_term();
+    ltype = gr_simpleExpression();
 
     // assert: allocatedTemporaries == n + 1
 
@@ -2818,7 +2819,7 @@ int gr_shiftExpression() {
 
         getSymbol();
 
-        rtype = gr_term();
+        rtype = gr_simpleExpression();
 
         // assert: allocatedTemporaries == n + 2
 
@@ -2842,9 +2843,7 @@ int gr_expression() {
     int rtype;
 
     // assert: n = allocatedTemporaries
-    if (ltype == gr_shiftExpression()) {
-    } else {    
-    ltype = gr_simpleExpression();
+    ltype = gr_shiftExpression();
 
     // assert: allocatedTemporaries == n + 1
 
@@ -2854,7 +2853,7 @@ int gr_expression() {
 
         getSymbol();
 
-        rtype = gr_simpleExpression();
+        rtype = gr_shiftExpression();
 
         // assert: allocatedTemporaries == n + 2
 
@@ -2918,7 +2917,6 @@ int gr_expression() {
             emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
         }
     }
-    } 
     // assert: allocatedTemporaries == n + 1
 
     return ltype;
@@ -6661,6 +6659,7 @@ int selfie(int argc, int* argv) {
 }
 
 int main(int argc, int *argv) {
+    int a;
     initLibrary();
 
     initScanner();
