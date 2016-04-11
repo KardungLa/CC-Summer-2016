@@ -1184,14 +1184,7 @@ int twoToThePowerOf(int p) {
 }
 
 int leftShift(int n, int b) {
-    // assert: b >= 0;
-
-    if (b < 31)
-        return n * twoToThePowerOf(b);
-    else if (b == 31)
-        return n * twoToThePowerOf(30) * 2;
-    else
-        return 0;
+    return n << b;
 }
 
 int rightShift(int n, int b) {
@@ -2833,9 +2826,9 @@ int gr_shiftExpression() {
         // assert: allocatedTemporaries == n + 2
 
         if (operatorSymbol == SYM_SL) {
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLLV);
+            emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLLV);
         } else if (operatorSymbol == SYM_SR) {
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SRLV);
+            emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
         }
 
         tfree(1);
@@ -5948,7 +5941,15 @@ void execute() {
     if (opcode == OP_SPECIAL) {
         if (function == FCT_NOP)
             fct_nop();
-        else if (function == FCT_ADDU)
+        else if (function == FCT_SLL)
+            fct_sll();
+        else if (function == FCT_SRL)
+            fct_srl();
+        else if (function == FCT_SLLV)
+            fct_sllv();
+        else if (function == FCT_SRLV)
+            fct_srlv();
+ 	else if (function == FCT_ADDU)
             fct_addu();
         else if (function == FCT_SUBU)
             fct_subu();
