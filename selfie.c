@@ -1192,14 +1192,14 @@ int rightShift(int n, int b) {
 
     if (n >= 0) {
         if (b < 31)
-            return n / twoToThePowerOf(b);
+            return n >> b;
         else
             return 0;
     } else if (b < 31)
         // works even if n == INT_MIN:
         // shift right n with msb reset and then restore msb
-        return ((n + 1) + INT_MAX) / twoToThePowerOf(b) +
-            (INT_MAX / twoToThePowerOf(b) + 1);
+        return ((((n + 1) + INT_MAX) >> b) +
+            ((INT_MAX >> b) + 1));
     else if (b == 31)
         return 1;
     else
@@ -6684,7 +6684,8 @@ int main(int argc, int *argv) {
 
     // test shift operators
     
-    a = 32;
+    a = -32;
+
     test = malloc(2*4);
     *test = 2;
     *(test + 1) = 1;
@@ -6702,45 +6703,45 @@ int main(int argc, int *argv) {
     print(itoa(a, string_buffer, 10, 0, 0));
     println();
 
-    a = a >> 3;
+   // a = a >> 3;
 
-    print((int*) "shift right by 3, result should be 2");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
+   // print((int*) "shift right by 3, result should be 2");
+   // println();
+   // print((int*) "a = ");
+   // print(itoa(a, string_buffer, 10, 0, 0));
+   // println();
 
-    a = a << a;
+   // a = a << a;
 
-    print((int*) "shift left by a, result should be 8");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
+   // print((int*) "shift left by a, result should be 8");
+   // println();
+   // print((int*) "a = ");
+   // print(itoa(a, string_buffer, 10, 0, 0));
+   // println();
 
-    a = a << *test;
+   // a = a << *test;
 
-    print((int*) "shift left by *test (value 2), result should be 32");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
+   // print((int*) "shift left by *test (value 2), result should be 32");
+   // println();
+   // print((int*) "a = ");
+   // print(itoa(a, string_buffer, 10, 0, 0));
+   // println();
 
-    a = a >> *(test + 1);
+   // a = a >> *(test + 1);
 
-    print((int*) "shift right by *(test + 1) (value 1), result should be 16");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
+   // print((int*) "shift right by *(test + 1) (value 1), result should be 16");
+   // println();
+   // print((int*) "a = ");
+   // print(itoa(a, string_buffer, 10, 0, 0));
+   // println();
 
-    a = a << *test << *(test + 1);
+   // a = a << *test << *(test + 1);
 
-    print((int*) "shift left twice by the values in test, result should be 128");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
+   // print((int*) "shift left twice by the values in test, result should be 128");
+   // println();
+   // print((int*) "a = ");
+   // print(itoa(a, string_buffer, 10, 0, 0));
+   // println();
     if (selfie(argc, (int*) argv) != 0) {
         print(selfieName);
         print((int*) ": usage: selfie { -c source | -o binary | -s assembly | -l binary } [ -m size ... | -d size ... | -y size ... ] ");
