@@ -462,11 +462,11 @@ void help_procedure_prologue(int localVariables);
 void help_procedure_epilogue(int parameters);
 
 int  gr_call(int *procedure);
-int  gr_factor();
-int  gr_term();
-int  gr_simpleExpression();
-int  gr_shiftExpression();
-int  gr_expression();
+int  gr_factor(int *constantVal); //TODO: pass in ConstantVal object
+int  gr_term(); //TODO: pass in ConstantVal object
+int  gr_simpleExpression(); //TODO: pass in ConstantVal object
+int  gr_shiftExpression(); //TODO: pass in ConstantVal object
+int  gr_expression(); //TODO: pass in ConstantVal object
 void gr_while();
 void gr_if();
 void gr_return(int returnType);
@@ -2463,7 +2463,7 @@ int gr_call(int *procedure) {
     int *entry;
     int numberOfTemporaries;
     int type;
-
+    int *constantVal;
     // assert: n = allocatedTemporaries
 
     // library procedures override regular procedures for bootstrapping
@@ -2479,7 +2479,8 @@ int gr_call(int *procedure) {
     // assert: allocatedTemporaries == 0
 
     if (isExpression()) {
-        gr_expression();
+        constantVal = malloc(2 * SIZEOFINT);
+        gr_expression(constantVal);
 
         // TODO: check if types/number of parameters is correct
         
@@ -2528,7 +2529,7 @@ int gr_call(int *procedure) {
     return type;
 }
 
-int gr_factor() {
+int gr_factor(int *constantVal) {
     int hasCast;
     int cast;
     int type;
@@ -2636,7 +2637,10 @@ int gr_factor() {
 
     // integer?
     } else if (symbol == SYM_INTEGER) {
-        load_integer(literal);
+        //pass value up to gr_term for constant folding
+        *(constantVal) = 1;
+        *(constantVal + 1) = literal;
+        //load_integer(literal);
 
         getSymbol();
 
@@ -2681,15 +2685,25 @@ int gr_factor() {
         return type;
 }
 
-int gr_term() {
+int gr_term(int *constantVal) {
     int ltype;
     int operatorSymbol;
     int rtype;
-
+    int constantTemp;
+    int lConstant;
     // assert: n = allocatedTemporaries
-
-    ltype = gr_factor();
-
+    //constantVal = malloc(2 * SIZEOFINT);
+    ltype = gr_factor(constantVal);
+    
+    // constant folding possible? 
+    if (*(constantVal)){
+        constantTemp = *(constantVal + 1);
+        *(constantVal) = 0;
+        *(constantVal + 1) = 0;
+        lConstant = 1;
+    }else{
+        load_integer(literal); 
+    } 
     // assert: allocatedTemporaries == n + 1
 
     // * / or % ?
@@ -2698,24 +2712,34 @@ int gr_term() {
 
         getSymbol();
 
-        rtype = gr_factor();
-
+        rtype = gr_factor(constantVal);
+        }
         // assert: allocatedTemporaries == n + 2
         
         if (ltype != rtype)
             typeWarning(ltype, rtype);
 
         if (operatorSymbol == SYM_ASTERISK) {
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
-            emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
-
+            if (lConstant == 1 && *(constantVal) == 1){
+                *(constantVal + 1) = constantTem * *(constantVal + 1);
+            } else {
+                emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
+                emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+            }
         } else if (operatorSymbol == SYM_DIV) {
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
-            emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
-
+            if (lConstant == 1 && *(constantVal) == 1){
+                *(constantVal + 1) = constantTem / *(constantVal + 1);
+            } else {
+                emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
+                emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+            }
         } else if (operatorSymbol == SYM_MOD) {
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
-            emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
+            if (lConstant == 1 && *(constantVal) == 1){
+                *(constantVal + 1) = constantTem % *(constantVal + 1);
+            } else {
+                emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
+                emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
+            }
         }
 
         tfree(1);
@@ -2731,7 +2755,9 @@ int gr_simpleExpression() {
     int ltype;
     int operatorSymbol;
     int rtype;
+    int *constantVal;
 
+    constantVal = malloc(2 * SIZEOFINT);
     // assert: n = allocatedTemporaries
 
     // optional: -
