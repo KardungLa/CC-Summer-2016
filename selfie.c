@@ -143,7 +143,7 @@ int CHAR_DOUBLEQUOTE  = '"';
 
 int SIZEOFINT     = 4; // must be the same as WORDSIZE
 int SIZEOFINTSTAR = 4; // must be the same as WORDSIZE
-
+int testvar = 2;
 int *power_of_two_table;
 
 int INT_MAX; // maximum numerical value of a signed 32-bit integer
@@ -463,9 +463,9 @@ void help_procedure_epilogue(int parameters);
 
 int  gr_call(int *procedure);
 int  gr_factor(int *constantVal); //TODO: pass in ConstantVal object
-int  gr_term(); //TODO: pass in ConstantVal object
+int  gr_term(int *constantVal); //TODO: pass in ConstantVal object
 int  gr_simpleExpression(); //TODO: pass in ConstantVal object
-int  gr_shiftExpression(); //TODO: pass in ConstantVal object
+int  gr_shiftExpression(); 
 int  gr_expression(); //TODO: pass in ConstantVal object
 void gr_while();
 void gr_if();
@@ -2464,6 +2464,7 @@ int gr_call(int *procedure) {
     int numberOfTemporaries;
     int type;
     int *constantVal;
+    
     // assert: n = allocatedTemporaries
 
     // library procedures override regular procedures for bootstrapping
@@ -2493,7 +2494,7 @@ int gr_call(int *procedure) {
         while (symbol == SYM_COMMA) {
             getSymbol();
 
-            gr_expression();
+            gr_expression(constantVal);
 
             // push more parameters onto stack
             emitIFormat(OP_ADDIU, REG_SP, REG_SP, -WORDSIZE);
@@ -2640,7 +2641,8 @@ int gr_factor(int *constantVal) {
         //pass value up to gr_term for constant folding
         *(constantVal) = 1;
         *(constantVal + 1) = literal;
-        //load_integer(literal);
+        
+    //    load_integer(literal);
 
         getSymbol();
 
@@ -2691,9 +2693,18 @@ int gr_term(int *constantVal) {
     int rtype;
     int constantTemp;
     int lConstant;
+    int foldable;
     // assert: n = allocatedTemporaries
     //constantVal = malloc(2 * SIZEOFINT);
+    
     ltype = gr_factor(constantVal);
+    
+    print((int*) "FoldFlag = ");
+    print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
+    println();
+    print((int*) "ConstantVal = ");
+    print(itoa((int)*(constantVal+1), string_buffer, 10, 0, 0));
+    println();
     
     // constant folding possible? 
     if (*(constantVal)){
@@ -2701,9 +2712,8 @@ int gr_term(int *constantVal) {
         *(constantVal) = 0;
         *(constantVal + 1) = 0;
         lConstant = 1;
-    }else{
-        load_integer(literal); 
-    } 
+    //   load_integer(literal);
+    }
     // assert: allocatedTemporaries == n + 1
 
     // * / or % ?
@@ -2713,38 +2723,57 @@ int gr_term(int *constantVal) {
         getSymbol();
 
         rtype = gr_factor(constantVal);
-        }
-        // assert: allocatedTemporaries == n + 2
+        if (*(constantVal)){
+        	if (lConstant){
+			foldable = 1;
+		} else {
+			load_integer(*(constantVal + 1));
+		}
+	}	
+	// assert: allocatedTemporaries == n + 2
+    print((int*) "FoldFlag = ");
+    print(itoa((int)foldable, string_buffer, 10, 0, 0));
+    print((int*) "FoldFlag = ");
+    print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
+    println();
+    print((int*) "ConstantVal = ");
+    print(itoa((int)*(constantVal+1), string_buffer, 10, 0, 0));
+    println();
         
         if (ltype != rtype)
             typeWarning(ltype, rtype);
 
         if (operatorSymbol == SYM_ASTERISK) {
-            if (lConstant == 1 && *(constantVal) == 1){
-                *(constantVal + 1) = constantTem * *(constantVal + 1);
+            if (foldable){
+              constantTemp = constantTemp * *(constantVal + 1);
             } else {
                 emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
                 emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
             }
         } else if (operatorSymbol == SYM_DIV) {
-            if (lConstant == 1 && *(constantVal) == 1){
-                *(constantVal + 1) = constantTem / *(constantVal + 1);
+            if (foldable){
+                constantTemp = constantTemp / *(constantVal + 1);
             } else {
                 emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
                 emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
             }
         } else if (operatorSymbol == SYM_MOD) {
-            if (lConstant == 1 && *(constantVal) == 1){
-                *(constantVal + 1) = constantTem % *(constantVal + 1);
+            if (foldable){
+                constantTemp = constantTemp % *(constantVal + 1);
             } else {
                 emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
                 emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
             }
         }
-
-        tfree(1);
+	if (foldable == 0) {
+        	tfree(1);
+	}
     }
 
+    if (foldable == 1) {
+    *(constantVal) = 1;
+    *(constantVal + 1) = constantTemp;
+    }
     // assert: allocatedTemporaries == n + 1
 
     return ltype;
@@ -2755,8 +2784,10 @@ int gr_simpleExpression() {
     int ltype;
     int operatorSymbol;
     int rtype;
-    int *constantVal;
-
+    int* constantVal;
+    int constantTemp;
+    int lConstant;
+	int foldable;
     constantVal = malloc(2 * SIZEOFINT);
     // assert: n = allocatedTemporaries
 
@@ -2781,7 +2812,22 @@ int gr_simpleExpression() {
     } else
         sign = 0;
 
-    ltype = gr_term();
+    ltype = gr_term(constantVal);
+    
+    print((int*) "FoldFlag = ");
+    print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
+    println();
+    print((int*) "ConstantVal = ");
+    print(itoa((int)*(constantVal+1), string_buffer, 10, 0, 0));
+    println();
+    
+    if (*(constantVal) == 1){
+        //constantTemp = *(constantVal + 1);
+        load_integer(*(constantVal + 1));
+	*(constantVal) = 0;
+        *(constantVal + 1) = 0;
+        lConstant = 1;
+    }
 
     // assert: allocatedTemporaries == n + 1
 
@@ -2801,8 +2847,15 @@ int gr_simpleExpression() {
 
         getSymbol();
 
-        rtype = gr_term();
+        rtype = gr_term(constantVal);
 
+        if (*(constantVal)){
+        	if (lConstant){
+			foldable = 1;
+		} else {
+			load_integer(*(constantVal + 1));
+		}
+	}	
         // assert: allocatedTemporaries == n + 2
 
         if (operatorSymbol == SYM_PLUS) {
@@ -2813,13 +2866,27 @@ int gr_simpleExpression() {
             } else if (rtype == INTSTAR_T)
                 typeWarning(ltype, rtype);
 
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
-
+            if (lConstant == 1) {
+                if (*(constantVal) == 1)
+                {
+                    *(constantVal + 1) = constantTemp + *(constantVal + 1);
+                }
+            } else {
+                emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+            }
+            
         } else if (operatorSymbol == SYM_MINUS) {
             if (ltype != rtype)
                 typeWarning(ltype, rtype);
 
-            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+            if (lConstant == 1) {
+                if (*(constantVal) == 1)
+                {
+                    *(constantVal + 1) = constantTemp - *(constantVal + 1);
+                }
+            } else {
+                emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+            }
         }
 
         tfree(1);
@@ -6710,25 +6777,36 @@ int main(int argc, int *argv) {
 
     // test shift operators
     
-    a = -32;
+    // a = -32;
 
-    test = malloc(2*4);
-    *test = 2;
-    *(test + 1) = 1;
-    print((int*) "initializing a with 32");
+    // test = malloc(2*4);
+    // *test = 2;
+    // *(test + 1) = 1;
+    // print((int*) "initializing a with 32");
+    // println();
+    // print((int*) "a = ");
+    // print(itoa(a, string_buffer, 10, 0, 0));
+    // println();
+
+    // a = a >> 1;
+
+    //  print((int*) "shift right by 1 position, result should be 16.");
+    // println();
+    // print((int*) "a = ");
+    // print(itoa(a, string_buffer, 10, 0, 0));
+    // println();
+
+    // test constant folding
+    
+    a = 42 * 2;
+    
+    print((int*) "constant folding a = 1 + 2");
     println();
     print((int*) "a = ");
     print(itoa(a, string_buffer, 10, 0, 0));
     println();
-
-    a = a >> 1;
-
-    print((int*) "shift right by 1 position, result should be 16.");
-    println();
-    print((int*) "a = ");
-    print(itoa(a, string_buffer, 10, 0, 0));
-    println();
-
+    
+    
    // a = a >> 3;
 
    // print((int*) "shift right by 3, result should be 2");
