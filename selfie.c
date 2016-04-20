@@ -494,11 +494,11 @@ void help_procedure_prologue(int localVariables);
 void help_procedure_epilogue(int parameters);
 
 int  gr_call(int* procedure);
-int  gr_factor(int* constantVal); 
-int  gr_term(int* constantVal); 
-int  gr_simpleExpression(); 
-int  gr_shiftExpression(); //TODO: pass in ConstantVal object
-int  gr_expression(); //TODO: pass in ConstantVal object
+int  gr_factor(int* constantVal);
+int  gr_term(int* constantVal);
+int  gr_simpleExpression(int* constantVal);
+int  gr_shiftExpression(int* constantVal);
+int  gr_expression();
 void gr_while();
 void gr_if();
 void gr_return(int returnType);
@@ -2766,22 +2766,31 @@ int gr_term(int* constantVal) {
   int rtype;
 
   int constantTemp;
-  int foldable;
+  int prevSymbol;
+  int isEmit;
+  int addTalloc;
+
+  constantTemp = 0;
+  isEmit = 0;
+  addTalloc = 0;
 
   // assert: n = allocatedTemporaries
-  //constantVal = malloc(2 * SIZEOFINT);
 
   ltype = gr_factor(constantVal);
 
-  // assert: allocatedTemporaries == n + 1
-
   if (*(constantVal) == 1) {
-    foldable = 1;
+    // constant
     constantTemp = *(constantVal + 1);
     *(constantVal) = 0;
+    prevSymbol = 1;
+    isEmit = 0;
   } else if (*(constantVal) == 2) {
+    // variable
     load_variable(*(constantVal + 1));
-    foldable = 0;
+    prevSymbol = 2;
+    isEmit = 1;
+    addTalloc = 1;
+    // assert: allocatedTemporaries == n + 1
   }
 
   // * / or % ?
@@ -2793,67 +2802,75 @@ int gr_term(int* constantVal) {
 
     rtype = gr_factor(constantVal);
 
-    if (*(constantVal) == 1) {
-      if (foldable == 1) {
-      } else if (foldable == 2) {
-        foldable = 1;
-      } else {
-        foldable = 2;
-        constantTemp = *(constantVal + 1);
-        *(constantVal) = 0;
-      }
-    } else if (*(constantVal) == 2) {
-      if (foldable == 1) {
-        load_integer(constantTemp);
-        foldable = 2;
-        load_variable(*(constantVal + 1));
-      } else {
-        load_variable(*(constantVal + 1));
-      }
-    }
 
-    // assert: allocatedTemporaries == n + 2
-    
     if (ltype != rtype)
       typeWarning(ltype, rtype);
 
-    if (operatorSymbol == SYM_ASTERISK) {
-      if (foldable == 1) {
-        constantTemp = constantTemp * *(constantVal + 1);
-      } else {
+    if (*(constantVal) == 1) {
+      if (prevSymbol == 2) {
+        // x*1
+
+        constantTemp = *(constantVal + 1);
+
+      } else if (prevSymbol == 1) {
+        // 1*1
+
+        if (operatorSymbol == SYM_ASTERISK) {
+          constantTemp = constantTemp * *(constantVal + 1);
+        } else if (operatorSymbol == SYM_DIV) {
+          constantTemp = constantTemp / *(constantVal + 1);
+        } else if (operatorSymbol == SYM_MOD) {
+          constantTemp = constantTemp % *(constantVal + 1);
+        }
+      }
+
+      isEmit = 0;
+    } else if (*(constantVal) == 2) {
+      if (prevSymbol == 2) {
+        // x*x
+        load_variable(*(constantVal + 1));
+      } else if (prevSymbol == 1) {
+        // 1*x
+        load_integer(constantTemp);
+        load_variable(*(constantVal + 1));
+        // assert: allocatedTemporaries == n + 2
+      }
+
+      if (operatorSymbol == SYM_ASTERISK) {
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
         emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
-      }
-    } else if (operatorSymbol == SYM_DIV) {
-      if (foldable == 1) {
-        constantTemp = constantTemp / *(constantVal + 1);
-      } else {
+      } else if (operatorSymbol == SYM_DIV) {
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
         emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
-      }
-    } else if (operatorSymbol == SYM_MOD) {
-      if (foldable == 1) {
-        constantTemp = constantTemp % *(constantVal + 1);
-      } else {
+      } else if (operatorSymbol == SYM_MOD) {
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
         emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
       }
-    }
 
-    if (foldable != 1) {
-      tfree(1);
+      if (prevSymbol == 1) {
+        tfree(2);
+      } else {
+        tfree(1);
+      }
+
+      isEmit = 1;
+
     }
+    prevSymbol = *(constantVal);
+
+
+
+  }
+  if (addTalloc == 1) {
+    tfree(1);
   }
 
-  if (foldable == 1) {
-    *(constantVal) = 1;
-    *(constantVal + 1) = constantTemp;
-  } else if (foldable == 2) { 
-    *(constantVal) = 1;
-    *(constantVal + 1) = constantTemp;
-  } else {
+  if (isEmit == 1) {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
+  } else {
+    *(constantVal) = 1;
+    *(constantVal + 1) = constantTemp;
   }
 
   // assert: allocatedTemporaries == n + 1
@@ -2861,15 +2878,21 @@ int gr_term(int* constantVal) {
   return ltype;
 }
 
-int gr_simpleExpression() {
+int gr_simpleExpression(int* constantVal) {
   int sign;
   int ltype;
   int operatorSymbol;
   int rtype;
+
   int constantTemp;
-  int foldable;
-  int* constantVal;
-  constantVal = malloc(2 * SIZEOFINT);
+  int prevSymbol;
+  int isEmit;
+  int addTalloc;
+
+  constantTemp = 0;
+  isEmit = 0;
+  addTalloc = 0;
+
 
   // assert: n = allocatedTemporaries
 
@@ -2895,27 +2918,50 @@ int gr_simpleExpression() {
     sign = 0;
 
   ltype = gr_term(constantVal);
-  
+
   if (*(constantVal) == 1) {
-    foldable = 1;
-    constantTemp = *(constantVal + 1);
+    // constant
+    if (sign) {
+      if (ltype != INT_T) {
+        typeWarning(INT_T, ltype);
+
+        ltype = INT_T;
+      }
+
+      constantTemp = - *(constantVal + 1);
+    } else {
+      constantTemp = *(constantVal + 1);
+
+
+    }
+
     *(constantVal) = 0;
+    prevSymbol = 1;
+    isEmit = 0;
   } else if (*(constantVal) == 2) {
+    // variable
     load_variable(*(constantVal + 1));
-    foldable = 0;
+    prevSymbol = 2;
+    isEmit = 1;
+    addTalloc = 1;
+
+    if (sign) {
+      if (ltype != INT_T) {
+        typeWarning(INT_T, ltype);
+
+        ltype = INT_T;
+      }
+
+      emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+    }
+
+
+    // assert: allocatedTemporaries == n + 1
   }
+
 
   // assert: allocatedTemporaries == n + 1
 
-  if (sign) {
-    if (ltype != INT_T) {
-      typeWarning(INT_T, ltype);
-
-      ltype = INT_T;
-    }
-
-    emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
-  }
 
   // + or -?
   while (isPlusOrMinus()) {
@@ -2925,68 +2971,127 @@ int gr_simpleExpression() {
 
     rtype = gr_term(constantVal);
 
+
     if (*(constantVal) == 1) {
-      if (foldable == 1) {
-      } else if (foldable == 2) {
-        foldable = 1;
-      } else {
-        foldable = 2;
+      if (prevSymbol == 2) {
+        // x+1
+
         constantTemp = *(constantVal + 1);
-        *(constantVal) = 0;
+      } else if (prevSymbol == 1) {
+        // 1+1
+
+        if (operatorSymbol == SYM_PLUS) {
+          if (ltype == INTSTAR_T) {
+            if (rtype == INT_T)
+              // pointer arithmetic: factor of 2^2 of integer operand
+              emitLeftShiftBy(2);
+          } else if (rtype == INTSTAR_T)
+            typeWarning(ltype, rtype);
+
+          constantTemp = constantTemp + *(constantVal + 1);
+
+        } else if (operatorSymbol == SYM_MINUS) {
+          if (ltype != rtype)
+            typeWarning(ltype, rtype);
+
+          constantTemp = constantTemp - *(constantVal + 1);
+
+        }
       }
+
+      isEmit = 0;
     } else if (*(constantVal) == 2) {
-      if (foldable == 1) {
-        load_integer(constantTemp);
-        foldable = 0;
-      } else {
+      if (prevSymbol == 2) {
+        // x+x
         load_variable(*(constantVal + 1));
+      } else if (prevSymbol == 1) {
+        // 1+x
+        load_integer(constantTemp);
+        load_variable(*(constantVal + 1));
+        // assert: allocatedTemporaries == n + 2
       }
-    }
-    // assert: allocatedTemporaries == n + 2
 
-    if (operatorSymbol == SYM_PLUS) {
-      if (ltype == INTSTAR_T) {
-        if (rtype == INT_T)
-          // pointer arithmetic: factor of 2^2 of integer operand
-          emitLeftShiftBy(2);
-      } else if (rtype == INTSTAR_T)
-        typeWarning(ltype, rtype);
-      if (foldable == 1){
-        constantTemp = constantTemp + *(constantVal + 1);
-      } else {
+
+      if (operatorSymbol == SYM_PLUS) {
+        if (ltype == INTSTAR_T) {
+          if (rtype == INT_T)
+            // pointer arithmetic: factor of 2^2 of integer operand
+            emitLeftShiftBy(2);
+        } else if (rtype == INTSTAR_T)
+          typeWarning(ltype, rtype);
+
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
-      }
-    } else if (operatorSymbol == SYM_MINUS) {
-      if (ltype != rtype)
-        typeWarning(ltype, rtype);
 
-      if (foldable == 1){
-        constantTemp = constantTemp - *(constantVal + 1);
+      } else if (operatorSymbol == SYM_MINUS) {
+        if (ltype != rtype)
+          typeWarning(ltype, rtype);
+
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+
+      }
+
+      if (prevSymbol == 1) {
+        tfree(2);
       } else {
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
-      }
-    }
-    if (foldable != 1){
         tfree(1);
+      }
+
+      isEmit = 1;
+
     }
+
+    prevSymbol = *(constantVal);
+
   }
 
-  if (foldable == 1){
-      load_integer(constantTemp);
+  if (addTalloc == 1) {
+    tfree(1);
   }
+  if (isEmit == 1) {
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
+  } else {
+    *(constantVal) = 1;
+    *(constantVal + 1) = constantTemp;
+  }
+
   // assert: allocatedTemporaries == n + 1
 
   return ltype;
 }
 
-int gr_shiftExpression() {
+int gr_shiftExpression(int* constantVal) {
   int ltype;
   int operatorSymbol;
   int rtype;
 
+  int constantTemp;
+  int prevSymbol;
+  int isEmit;
+  int addTalloc;
+
+  constantTemp = 0;
+  isEmit = 0;
+  addTalloc = 0;
+
   // assert: n = allocatedTemporaries
 
-  ltype = gr_simpleExpression();
+  ltype = gr_simpleExpression(constantVal);
+
+  if (*(constantVal) == 1) {
+    // constant
+    constantTemp = *(constantVal + 1);
+    *(constantVal) = 0;
+    prevSymbol = 1;
+    isEmit = 0;
+  } else if (*(constantVal) == 2) {
+    // variable
+    load_variable(*(constantVal + 1));
+    prevSymbol = 2;
+    isEmit = 1;
+    addTalloc = 1;
+    // assert: allocatedTemporaries == n + 1
+  }
 
   // assert: allocatedTemporaries == n + 1
 
@@ -2996,17 +3101,70 @@ int gr_shiftExpression() {
 
     getSymbol();
 
-    rtype = gr_simpleExpression();
+    rtype = gr_simpleExpression(constantVal);
 
     // assert: allocatedTemporaries == n + 2
 
-    if (operatorSymbol == SYM_SL) {
-      emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLLV);
-    } else if (operatorSymbol == SYM_SR) {
-      emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
+    if (*(constantVal) == 1) {
+      if (prevSymbol == 2) {
+        // x << or >> 1
+
+        constantTemp = *(constantVal + 1);
+      } else if (prevSymbol == 1) {
+        // 1 << or >> 1
+
+        if (operatorSymbol == SYM_SL) {
+          constantTemp = constantTemp << *(constantVal + 1);
+        } else if (operatorSymbol == SYM_SR) {
+          constantTemp = constantTemp >> *(constantVal + 1);
+        }
+
+      }
+
+      isEmit = 0;
+    } else if (*(constantVal) == 2) {
+      if (prevSymbol == 2) {
+        // x << or >> x
+        load_variable(*(constantVal + 1));
+      } else if (prevSymbol == 1) {
+        // 1 << or >> x
+        load_integer(constantTemp);
+        load_variable(*(constantVal + 1));
+        // assert: allocatedTemporaries == n + 2
+      }
+
+
+      if (operatorSymbol == SYM_SL) {
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLLV);
+      } else if (operatorSymbol == SYM_SR) {
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
+      }
+
+      if (prevSymbol == 1) {
+        tfree(2);
+      } else {
+        tfree(1);
+      }
+
+      isEmit = 1;
+
     }
 
+    prevSymbol = *(constantVal);
+
+
+
+  }
+
+  if (addTalloc == 1) {
     tfree(1);
+  }
+  if (isEmit == 1) {
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
+  } else {
+    *(constantVal) = 1;
+    *(constantVal + 1) = constantTemp;
   }
 
   // assert: allocatedTemporaries == n + 1
@@ -3019,8 +3177,38 @@ int gr_expression() {
   int operatorSymbol;
   int rtype;
 
+  int constantTemp;
+  int prevSymbol;
+  int isEmit;
+  int addTalloc;
+
+  constantTemp = 0;
+  isEmit = 0;
+  addTalloc = 0;
+
+  int* constantVal;
+  constantVal = malloc(2 * SIZEOFINT);
+
   // assert: n = allocatedTemporaries
-  ltype = gr_shiftExpression();
+  ltype = gr_shiftExpression(constantVal);
+
+  if (*(constantVal) == 1) {
+    // constant
+
+    if (*(constantVal + 1) < 0) {
+      load_integer(*(constantVal + 1) * (-1));
+      emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+    } else {
+      load_integer(*(constantVal + 1));
+    }
+
+    addTalloc = 1;
+  } else if (*(constantVal) == 2) {
+    // variable
+    load_variable(*(constantVal + 1));
+    addTalloc = 1;
+  }
+
 
   // assert: allocatedTemporaries == n + 1
 
@@ -3030,7 +3218,15 @@ int gr_expression() {
 
     getSymbol();
 
-    rtype = gr_shiftExpression();
+    rtype = gr_shiftExpression(constantVal);
+
+    if (*(constantVal) == 1) {
+      // constant
+      load_integer(*(constantVal + 1));
+    } else if (*(constantVal) == 2) {
+      // variable
+      load_variable(*(constantVal + 1));
+    }
 
     // assert: allocatedTemporaries == n + 2
 
@@ -3094,6 +3290,7 @@ int gr_expression() {
       emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
     }
   }
+
   // assert: allocatedTemporaries == n + 1
 
   return ltype;
@@ -6858,12 +7055,6 @@ int main(int argc, int* argv) {
   print((int*) "This is USEG Selfie");
   println();
 
-  int x;
-  x = 2 * 3;
-
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-    
   if (selfie(argc, (int*) argv) != 0) {
     print(selfieName);
     print((int*) ": usage: selfie { -c source | -o binary | -s assembly | -l binary } [ -m size ... | -d size ... | -y size ... ] ");
