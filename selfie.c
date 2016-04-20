@@ -143,7 +143,7 @@ int CHAR_DOUBLEQUOTE  = '"';
 
 int SIZEOFINT     = 4; // must be the same as WORDSIZE
 int SIZEOFINTSTAR = 4; // must be the same as WORDSIZE
-int testvar = 2;
+
 int* power_of_two_table;
 
 int INT_MAX; // maximum numerical value of a signed 32-bit integer
