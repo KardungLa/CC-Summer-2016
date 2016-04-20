@@ -494,10 +494,10 @@ void help_procedure_prologue(int localVariables);
 void help_procedure_epilogue(int parameters);
 
 int  gr_call(int* procedure);
-int  gr_factor(int* constantVal); //TODO: pass in ConstantVal object
-int  gr_term(int* constantVal); //TODO: pass in ConstantVal object
-int  gr_simpleExpression(); //TODO: pass in ConstantVal object
-int  gr_shiftExpression();
+int  gr_factor(int* constantVal); 
+int  gr_term(int* constantVal); 
+int  gr_simpleExpression(); 
+int  gr_shiftExpression(); //TODO: pass in ConstantVal object
 int  gr_expression(); //TODO: pass in ConstantVal object
 void gr_while();
 void gr_if();
@@ -2769,7 +2769,6 @@ int gr_term(int* constantVal) {
 
   int constantTemp;
   int foldable;
-  int prevSymbol;
 
   // assert: n = allocatedTemporaries
   //constantVal = malloc(2 * SIZEOFINT);
@@ -2824,6 +2823,7 @@ int gr_term(int* constantVal) {
     // assert: allocatedTemporaries == n + 2
     print((int*) "FoldFlag = ");
     print(itoa((int)foldable, string_buffer, 10, 0, 0));
+    println();
     print((int*) "FoldFlag = ");
     print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
     println();
@@ -2880,8 +2880,9 @@ int gr_simpleExpression() {
   int ltype;
   int operatorSymbol;
   int rtype;
+  int constantTemp;
+  int foldable;
   int* constantVal;
-
   constantVal = malloc(2 * SIZEOFINT);
 
   // assert: n = allocatedTemporaries
@@ -2909,6 +2910,15 @@ int gr_simpleExpression() {
 
   ltype = gr_term(constantVal);
 
+  if (*(constantVal) == 1) {
+    foldable = 1;
+    constantTemp = *(constantVal + 1);
+    *(constantVal) = 0;
+  } else if (*(constantVal) == 2) {
+    load_variable(*(constantVal + 1));
+    foldable = 0;
+  }
+
   print((int*) "FoldFlag = ");
   print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
   println();
@@ -2916,9 +2926,6 @@ int gr_simpleExpression() {
   print(itoa((int) * (constantVal + 1), string_buffer, 10, 0, 0));
   println();
 
-  if (*(constantVal) == 1) {
-    load_integer(*(constantVal + 1));
-  }
 
   // assert: allocatedTemporaries == n + 1
 
@@ -2940,13 +2947,23 @@ int gr_simpleExpression() {
 
     rtype = gr_term(constantVal);
 
-    //if (*(constantVal)){
-    //  if (lConstant){
-    //      foldable = 1;
-    //    } else {
-    //      load_integer(*(constantVal + 1));
-    //    }
-    //  }
+    if (*(constantVal) == 1) {
+      if (foldable == 1) {
+      } else if (foldable == 2) {
+        foldable = 1;
+      } else {
+        foldable = 2;
+        constantTemp = *(constantVal + 1);
+        *(constantVal) = 0;
+      }
+    } else if (*(constantVal) == 2) {
+      if (foldable == 1) {
+        load_integer(constantTemp);
+        foldable = 0;
+      } else {
+        load_variable(*(constantVal + 1));
+      }
+    }
     // assert: allocatedTemporaries == n + 2
 
     if (operatorSymbol == SYM_PLUS) {
@@ -2956,33 +2973,30 @@ int gr_simpleExpression() {
           emitLeftShiftBy(2);
       } else if (rtype == INTSTAR_T)
         typeWarning(ltype, rtype);
-
-      //           if (lConstant == 1) {
-      //              if (*(constantVal) == 1)
-      //             {
-      //                *(constantVal + 1) = constantTemp + *(constantVal + 1);
-      //            }
-      //        } else {
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
-      //        }
-
+      if (foldable == 1){
+        constantTemp = constantTemp + *(constantVal + 1);
+      } else {
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+      }
     } else if (operatorSymbol == SYM_MINUS) {
       if (ltype != rtype)
         typeWarning(ltype, rtype);
 
-      //       if (lConstant == 1) {
-      //           if (*(constantVal) == 1)
-      //           {
-      //               *(constantVal + 1) = constantTemp - *(constantVal + 1);
-      //           }
-      //       } else {
+      if (foldable == 1){
+        constantTemp = constantTemp - *(constantVal + 1);
+      } else {
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
-      //       }
+      }
     }
-
-    tfree(1);
+    if (foldable != 1){
+        tfree(1);
+    }
   }
-
+  if (foldable ==1){
+    if (*(constantVal) == 1){
+      load_integer(constantTemp);
+    }
+  }
   // assert: allocatedTemporaries == n + 1
 
   return ltype;
