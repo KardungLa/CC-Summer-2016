@@ -2814,14 +2814,15 @@ int gr_term(int* constantVal) {
     } else if (*(constantVal) == 2) {
       if (foldable == 1) {
         load_integer(constantTemp);
-        foldable = 0;
+        foldable = 2;
+        load_variable(*(constantVal + 1));
       } else {
         load_variable(*(constantVal + 1));
       }
     }
 
     // assert: allocatedTemporaries == n + 2
-    print((int*) "FoldFlag = ");
+    print((int*) "in while FoldFlag = ");
     print(itoa((int)foldable, string_buffer, 10, 0, 0));
     println();
     print((int*) "FoldFlag = ");
@@ -2830,7 +2831,8 @@ int gr_term(int* constantVal) {
     print((int*) "ConstantVal = ");
     print(itoa((int) * (constantVal + 1), string_buffer, 10, 0, 0));
     println();
-
+    print((int*) "in while FoldFlag = ");
+    
     if (ltype != rtype)
       typeWarning(ltype, rtype);
 
@@ -2856,6 +2858,15 @@ int gr_term(int* constantVal) {
         emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
       }
     }
+    print((int*) "in while FoldFlag = ");
+    print(itoa((int)foldable, string_buffer, 10, 0, 0));
+    println();
+    print((int*) "FoldFlag = ");
+    print(itoa((int)*constantVal, string_buffer, 10, 0, 0));
+    println();
+    print((int*) "ConstantVal = ");
+    print(itoa((int) * (constantVal + 1), string_buffer, 10, 0, 0));
+    println();
 
     if (foldable != 1) {
       tfree(1);
