@@ -2705,7 +2705,7 @@ int gr_factor(int* constantVal) {
     } else {
       // variable access: identifier
       type = load_variable(variableOrProcedureName);
-     }
+    }
   } else if (symbol == SYM_INTEGER) {
     //pass value up to gr_term for constant folding
     *(constantVal) = 1;
@@ -2776,11 +2776,11 @@ int gr_term(int* constantVal) {
     *(constantVal) = 0;
     prevSymbol = 1;
   } else {
-      prevSymbol = 2;
-      isEmit = 1;
-      // assert: allocatedTemporaries == n + 1
+    prevSymbol = 2;
+    isEmit = 1;
+    // assert: allocatedTemporaries == n + 1
   }
-    
+
   // * / or % ?
   while (isStarOrDivOrModulo()) {
 
@@ -2798,7 +2798,7 @@ int gr_term(int* constantVal) {
       if (prevSymbol == 2) {
         // x=x*1
         constantTemp = *(constantVal + 1);
-          tfree(1);
+        tfree(1);
       } else if (prevSymbol == 1) {
         // 1*1
 
@@ -2812,8 +2812,8 @@ int gr_term(int* constantVal) {
       }
 
       isEmit = 0;
-        
-        prevSymbol = 1;
+
+      prevSymbol = 1;
     } else {
       if (prevSymbol == 2) {
         // x*x
@@ -2822,11 +2822,11 @@ int gr_term(int* constantVal) {
         // 1*x
         load_integer(constantTemp);
         //load_variable(*(constantVal + 1));
-        
+
       }
 
-        // assert: allocatedTemporaries == n + 2
-        
+      // assert: allocatedTemporaries == n + 2
+
       if (operatorSymbol == SYM_ASTERISK) {
         emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, FCT_MULTU);
         emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), FCT_MFLO);
@@ -2838,13 +2838,15 @@ int gr_term(int* constantVal) {
         emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), FCT_MFHI);
       }
 
-        isEmit = 1;
-        
-        tfree(1);
-        
-        prevSymbol = 2;
+      isEmit = 1;
+
+      tfree(1);
+
+      prevSymbol = 2;
     }
-    
+
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
 
   }
@@ -2926,7 +2928,7 @@ int gr_simpleExpression(int* constantVal) {
     // variable
     prevSymbol = 2;
     isEmit = 1;
-    
+
     if (sign) {
       if (ltype != INT_T) {
         typeWarning(INT_T, ltype);
@@ -2950,13 +2952,14 @@ int gr_simpleExpression(int* constantVal) {
 
     rtype = gr_term(constantVal);
 
-      if (*(constantVal) == 1) {
-        
+
+    if (*(constantVal) == 1) {
+
       if (prevSymbol == 2) {
         // x+1
 
         constantTemp = *(constantVal + 1);
-          tfree(1);
+        tfree(1);
       } else if (prevSymbol == 1) {
         // 1+1
 
@@ -2980,15 +2983,14 @@ int gr_simpleExpression(int* constantVal) {
       }
 
       isEmit = 0;
-        prevSymbol = 1;
+      prevSymbol = 1;
     } else  {
-        
+
       if (prevSymbol == 2) {
         // x+x
         //load_variable(*(constantVal + 1));
       } else if (prevSymbol == 1) {
         // 1+x
-          
         load_integer(constantTemp);
         //load_variable(*(constantVal + 1));
         // assert: allocatedTemporaries == n + 2
@@ -3003,9 +3005,7 @@ int gr_simpleExpression(int* constantVal) {
         } else if (rtype == INTSTAR_T)
           typeWarning(ltype, rtype);
 
-          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_ADDU);
-
-
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_ADDU);
       } else if (operatorSymbol == SYM_MINUS) {
         if (ltype != rtype)
           typeWarning(ltype, rtype);
@@ -3013,16 +3013,18 @@ int gr_simpleExpression(int* constantVal) {
         emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SUBU);
 
       }
+      isEmit = 1;
 
-        isEmit = 1;
-        
-        tfree(1);
-        
-        prevSymbol = 2;
+      tfree(1);
+
+      prevSymbol = 2;
+
 
     }
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
-   
+
   }
 
   if (isEmit == 1) {
@@ -3046,10 +3048,10 @@ int gr_shiftExpression(int* constantVal) {
   int constantTemp;
   int prevSymbol;
   int isEmit;
- 
+
   constantTemp = 0;
   isEmit = 0;
- 
+
   // assert: n = allocatedTemporaries
 
   ltype = gr_simpleExpression(constantVal);
@@ -3082,7 +3084,7 @@ int gr_shiftExpression(int* constantVal) {
         // x << or >> 1
 
         constantTemp = *(constantVal + 1);
-          tfree(1);
+        tfree(1);
       } else if (prevSymbol == 1) {
         // 1 << or >> 1
 
@@ -3095,7 +3097,7 @@ int gr_shiftExpression(int* constantVal) {
       }
 
       isEmit = 0;
-        prevSymbol = 1;
+      prevSymbol = 1;
     } else {
       if (prevSymbol == 2) {
         // x << or >> x
@@ -3114,18 +3116,19 @@ int gr_shiftExpression(int* constantVal) {
         emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SRLV);
       }
 
-        isEmit = 1;
-        
-        tfree(1);
-        
-        prevSymbol = 2;
+      isEmit = 1;
+
+      tfree(1);
+
+      prevSymbol = 2;
 
     }
-
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
   }
 
-    if (isEmit == 1) {
+  if (isEmit == 1) {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
   } else {
@@ -3143,16 +3146,16 @@ int gr_expression() {
   int operatorSymbol;
   int rtype;
 
-    int* constantVal;
-    
+  int* constantVal;
+
   int constantTemp;
   int prevSymbol;
   int isEmit;
-  
+
   constantTemp = 0;
   isEmit = 0;
-  
- constantVal = malloc(2 * SIZEOFINT);
+
+  constantVal = malloc(2 * SIZEOFINT);
 
   // assert: n = allocatedTemporaries
   ltype = gr_shiftExpression(constantVal);
@@ -3173,8 +3176,8 @@ int gr_expression() {
 
   //optional: ==, !=, <, >, <=, >= simpleExpression
   if (isComparison()) {
-      
-      
+
+
     operatorSymbol = symbol;
 
     getSymbol();
@@ -3185,7 +3188,7 @@ int gr_expression() {
       // constant
       load_integer(*(constantVal + 1));
     }
- 
+
     // assert: allocatedTemporaries == n + 2
 
     if (ltype != rtype)
@@ -3429,11 +3432,11 @@ void gr_return(int returnType) {
 
     // save value of expression in return register
     emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), REG_V0, FCT_ADDU);
-      
+
     tfree(1);
   }
 
- 
+
 
   // unconditional branch to procedure epilogue
   // maintain fixup chain for later fixup
