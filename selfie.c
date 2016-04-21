@@ -2704,18 +2704,12 @@ int gr_factor(int* constantVal) {
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
     } else {
       // variable access: identifier
-      //type = load_variable(variableOrProcedureName);
-      *(constantVal) = 2;
-      *(constantVal + 1) = variableOrProcedureName;
-
-      // integer?
-    }
+      type = load_variable(variableOrProcedureName);
+     }
   } else if (symbol == SYM_INTEGER) {
     //pass value up to gr_term for constant folding
     *(constantVal) = 1;
     *(constantVal + 1) = literal;
-
-    //    load_integer(literal);
 
     getSymbol();
 
@@ -2768,11 +2762,9 @@ int gr_term(int* constantVal) {
   int constantTemp;
   int prevSymbol;
   int isEmit;
-  int addTalloc;
 
   constantTemp = 0;
   isEmit = 0;
-  addTalloc = 0;
 
   // assert: n = allocatedTemporaries
 
@@ -2783,16 +2775,12 @@ int gr_term(int* constantVal) {
     constantTemp = *(constantVal + 1);
     *(constantVal) = 0;
     prevSymbol = 1;
-    isEmit = 0;
-  } else if (*(constantVal) == 2) {
-    // variable
-    load_variable(*(constantVal + 1));
-    prevSymbol = 2;
-    isEmit = 1;
-    addTalloc = 1;
-    // assert: allocatedTemporaries == n + 1
+  } else {
+      prevSymbol = 2;
+      isEmit = 1;
+      // assert: allocatedTemporaries == n + 1
   }
-
+    
   // * / or % ?
   while (isStarOrDivOrModulo()) {
 
@@ -2808,10 +2796,9 @@ int gr_term(int* constantVal) {
 
     if (*(constantVal) == 1) {
       if (prevSymbol == 2) {
-        // x*1
-
+        // x=x*1
         constantTemp = *(constantVal + 1);
-
+          tfree(1);
       } else if (prevSymbol == 1) {
         // 1*1
 
@@ -2825,44 +2812,41 @@ int gr_term(int* constantVal) {
       }
 
       isEmit = 0;
-    } else if (*(constantVal) == 2) {
+        
+        prevSymbol = 1;
+    } else {
       if (prevSymbol == 2) {
         // x*x
-        load_variable(*(constantVal + 1));
+        // load_variable(*(constantVal + 1));
       } else if (prevSymbol == 1) {
         // 1*x
         load_integer(constantTemp);
-        load_variable(*(constantVal + 1));
+        //load_variable(*(constantVal + 1));
+        
+      }
+
         // assert: allocatedTemporaries == n + 2
-      }
-
+        
       if (operatorSymbol == SYM_ASTERISK) {
-        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
-        emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, FCT_MULTU);
+        emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), FCT_MFLO);
       } else if (operatorSymbol == SYM_DIV) {
-        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
-        emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, FCT_DIVU);
+        emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), FCT_MFLO);
       } else if (operatorSymbol == SYM_MOD) {
-        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_DIVU);
-        emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFHI);
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), 0, FCT_DIVU);
+        emitRFormat(OP_SPECIAL, 0, 0, currentTemporary(), FCT_MFHI);
       }
 
-      if (prevSymbol == 1) {
-        tfree(2);
-      } else {
+        isEmit = 1;
+        
         tfree(1);
-      }
-
-      isEmit = 1;
-
+        
+        prevSymbol = 2;
     }
-    prevSymbol = *(constantVal);
+    
 
 
-
-  }
-  if (addTalloc == 1) {
-    tfree(1);
   }
 
   if (isEmit == 1) {
@@ -2938,13 +2922,11 @@ int gr_simpleExpression(int* constantVal) {
     *(constantVal) = 0;
     prevSymbol = 1;
     isEmit = 0;
-  } else if (*(constantVal) == 2) {
+  } else {
     // variable
-    load_variable(*(constantVal + 1));
     prevSymbol = 2;
     isEmit = 1;
-    addTalloc = 1;
-
+    
     if (sign) {
       if (ltype != INT_T) {
         typeWarning(INT_T, ltype);
@@ -2960,9 +2942,6 @@ int gr_simpleExpression(int* constantVal) {
   }
 
 
-  // assert: allocatedTemporaries == n + 1
-
-
   // + or -?
   while (isPlusOrMinus()) {
     operatorSymbol = symbol;
@@ -2971,12 +2950,13 @@ int gr_simpleExpression(int* constantVal) {
 
     rtype = gr_term(constantVal);
 
-
-    if (*(constantVal) == 1) {
+      if (*(constantVal) == 1) {
+        
       if (prevSymbol == 2) {
         // x+1
 
         constantTemp = *(constantVal + 1);
+          tfree(1);
       } else if (prevSymbol == 1) {
         // 1+1
 
@@ -3000,14 +2980,17 @@ int gr_simpleExpression(int* constantVal) {
       }
 
       isEmit = 0;
-    } else if (*(constantVal) == 2) {
+        prevSymbol = 1;
+    } else  {
+        
       if (prevSymbol == 2) {
         // x+x
-        load_variable(*(constantVal + 1));
+        //load_variable(*(constantVal + 1));
       } else if (prevSymbol == 1) {
         // 1+x
+          
         load_integer(constantTemp);
-        load_variable(*(constantVal + 1));
+        //load_variable(*(constantVal + 1));
         // assert: allocatedTemporaries == n + 2
       }
 
@@ -3020,33 +3003,28 @@ int gr_simpleExpression(int* constantVal) {
         } else if (rtype == INTSTAR_T)
           typeWarning(ltype, rtype);
 
-        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_ADDU);
+
 
       } else if (operatorSymbol == SYM_MINUS) {
         if (ltype != rtype)
           typeWarning(ltype, rtype);
 
-        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SUBU);
 
       }
 
-      if (prevSymbol == 1) {
-        tfree(2);
-      } else {
+        isEmit = 1;
+        
         tfree(1);
-      }
-
-      isEmit = 1;
+        
+        prevSymbol = 2;
 
     }
 
-    prevSymbol = *(constantVal);
-
+   
   }
 
-  if (addTalloc == 1) {
-    tfree(1);
-  }
   if (isEmit == 1) {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
@@ -3068,12 +3046,10 @@ int gr_shiftExpression(int* constantVal) {
   int constantTemp;
   int prevSymbol;
   int isEmit;
-  int addTalloc;
-
+ 
   constantTemp = 0;
   isEmit = 0;
-  addTalloc = 0;
-
+ 
   // assert: n = allocatedTemporaries
 
   ltype = gr_simpleExpression(constantVal);
@@ -3084,16 +3060,12 @@ int gr_shiftExpression(int* constantVal) {
     *(constantVal) = 0;
     prevSymbol = 1;
     isEmit = 0;
-  } else if (*(constantVal) == 2) {
+  } else {
     // variable
-    load_variable(*(constantVal + 1));
     prevSymbol = 2;
     isEmit = 1;
-    addTalloc = 1;
     // assert: allocatedTemporaries == n + 1
   }
-
-  // assert: allocatedTemporaries == n + 1
 
   // << or >>
   while (isShiftOperator()) {
@@ -3110,6 +3082,7 @@ int gr_shiftExpression(int* constantVal) {
         // x << or >> 1
 
         constantTemp = *(constantVal + 1);
+          tfree(1);
       } else if (prevSymbol == 1) {
         // 1 << or >> 1
 
@@ -3122,44 +3095,37 @@ int gr_shiftExpression(int* constantVal) {
       }
 
       isEmit = 0;
-    } else if (*(constantVal) == 2) {
+        prevSymbol = 1;
+    } else {
       if (prevSymbol == 2) {
         // x << or >> x
-        load_variable(*(constantVal + 1));
+        //load_variable(*(constantVal + 1));
       } else if (prevSymbol == 1) {
         // 1 << or >> x
         load_integer(constantTemp);
-        load_variable(*(constantVal + 1));
+        //load_variable(*(constantVal + 1));
         // assert: allocatedTemporaries == n + 2
       }
 
 
       if (operatorSymbol == SYM_SL) {
-        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLLV);
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLLV);
       } else if (operatorSymbol == SYM_SR) {
-        emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SRLV);
       }
 
-      if (prevSymbol == 1) {
-        tfree(2);
-      } else {
+        isEmit = 1;
+        
         tfree(1);
-      }
-
-      isEmit = 1;
+        
+        prevSymbol = 2;
 
     }
 
-    prevSymbol = *(constantVal);
-
-
 
   }
 
-  if (addTalloc == 1) {
-    tfree(1);
-  }
-  if (isEmit == 1) {
+    if (isEmit == 1) {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
   } else {
@@ -3177,17 +3143,16 @@ int gr_expression() {
   int operatorSymbol;
   int rtype;
 
+    int* constantVal;
+    
   int constantTemp;
   int prevSymbol;
   int isEmit;
-  int addTalloc;
-
+  
   constantTemp = 0;
   isEmit = 0;
-  addTalloc = 0;
-
-  int* constantVal;
-  constantVal = malloc(2 * SIZEOFINT);
+  
+ constantVal = malloc(2 * SIZEOFINT);
 
   // assert: n = allocatedTemporaries
   ltype = gr_shiftExpression(constantVal);
@@ -3202,18 +3167,14 @@ int gr_expression() {
       load_integer(*(constantVal + 1));
     }
 
-    addTalloc = 1;
-  } else if (*(constantVal) == 2) {
-    // variable
-    load_variable(*(constantVal + 1));
-    addTalloc = 1;
   }
 
-
-  // assert: allocatedTemporaries == n + 1
+  // assert: allocatedTemporaries == n + 1 or n
 
   //optional: ==, !=, <, >, <=, >= simpleExpression
   if (isComparison()) {
+      
+      
     operatorSymbol = symbol;
 
     getSymbol();
@@ -3223,11 +3184,8 @@ int gr_expression() {
     if (*(constantVal) == 1) {
       // constant
       load_integer(*(constantVal + 1));
-    } else if (*(constantVal) == 2) {
-      // variable
-      load_variable(*(constantVal + 1));
     }
-
+ 
     // assert: allocatedTemporaries == n + 2
 
     if (ltype != rtype)
@@ -3471,9 +3429,11 @@ void gr_return(int returnType) {
 
     // save value of expression in return register
     emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), REG_V0, FCT_ADDU);
+      
+    tfree(1);
   }
 
-  tfree(1);
+ 
 
   // unconditional branch to procedure epilogue
   // maintain fixup chain for later fixup
