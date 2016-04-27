@@ -27,19 +27,19 @@ call             = identifier "(" [ expression { "," expression } ] ")" .
 
 literal          = integer | "'" ascii_character "'" .
 
-factor           = [ cast ] 
+factor <constantVal>   = [ cast ] 
                     ( [ "*" ] ( identifier | "(" expression ")" ) |
                       call |
                       literal |
                       """ { ascii_character } """ ) .
 
-term             = factor { ( "*" | "/" | "%" ) factor } .
+term <constantVal>             = factor <constantVal> { ( "*" | "/" | "%" ) factor <constantVal> } .
 
-simpleExpression = [ "-" ] term { ( "+" | "-" ) term } .
+simpleExpression <constantVal> = [ "-" ] term <constantVal> { ( "+" | "-" ) term <constantVal> } .
 
-shiftExpression  = simpleExpression { ("<<" | ">>") simpleExpression } .
+shiftExpression <constantVal>  = simpleExpression <constantVal> { ("<<" | ">>") simpleExpression <constantVal> } .
 
-expression       = shiftExpression [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression ] .
+expression       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
 
 while            = "while" "(" expression ")" 
                              ( statement |
