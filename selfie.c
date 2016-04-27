@@ -757,7 +757,7 @@ void selfie_load();
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
-int maxBinaryLength = 262144; // 128KB
+int maxBinaryLength = 262144; // 256KB
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2903,8 +2903,6 @@ int gr_simpleExpression(int* constantVal) {
 
   // assert: n = allocatedTemporaries
 
-
-
   // optional: -
   if (symbol == SYM_MINUS) {
     sign = 1;
@@ -2961,9 +2959,6 @@ int gr_simpleExpression(int* constantVal) {
 
   *(constantVal) = 0;
   *(constantVal + 1) = 0;
-
-  // assert: allocatedTemporaries == n + 1
-
 
   // + or -?
   while (isPlusOrMinus()) {
@@ -3088,7 +3083,6 @@ int gr_shiftExpression(int* constantVal) {
   prevType = 0;
   constantTemp = 0;
 
-
   // assert: n = allocatedTemporaries
 
   ltype = gr_simpleExpression(constantVal);
@@ -3105,9 +3099,6 @@ int gr_shiftExpression(int* constantVal) {
 
   *(constantVal) = 0;
   *(constantVal + 1) = 0;
-
-
-  // assert: allocatedTemporaries == n + 1
 
   // << or >>
   while (isShiftOperator()) {
@@ -3186,9 +3177,7 @@ int gr_expression() {
   int rtype;
   int* constantVal;
   int constantTemp;
-  int prevType;
 
-  prevType = 0;
   constantTemp = 0;
   constantVal = malloc(2 * SIZEOFINT);
 
@@ -3201,10 +3190,11 @@ int gr_expression() {
     } else {
       load_integer(*(constantVal + 1));
     }
-  } else {
-    *(constantVal) = 0;
-    *(constantVal + 1) = 0;
   }
+
+  *(constantVal) = 0;
+  *(constantVal + 1) = 0;
+
   // assert: allocatedTemporaries == n + 1
 
   //optional: ==, !=, <, >, <=, >= simpleExpression
@@ -3221,10 +3211,11 @@ int gr_expression() {
       } else {
         load_integer(*(constantVal + 1));
       }
-    } else {
-      *(constantVal) = 0;
-      *(constantVal + 1) = 0;
     }
+
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
+
     // assert: allocatedTemporaries == n + 2
 
     if (ltype != rtype)
@@ -7049,7 +7040,7 @@ int main(int argc, int* argv) {
 
   print((int*) "This is USEG Selfie");
   println();
-  print((int*) "Testing constant folding for gr_term now: ");
+  print((int*) "Testing constant folding now: ");
   println();
 
   x = 3;
