@@ -510,7 +510,7 @@ void gr_if();
 void gr_return(int returnType);
 void gr_statement();
 int  gr_type();
-int  gr_selector();
+int  gr_selector(int* name);
 void gr_variable(int offset);
 void gr_initialization(int* name, int offset, int type);
 void gr_procedure(int* procedure, int returnType);
@@ -4043,42 +4043,49 @@ int gr_type() {
   return type;
 }
 
-int gr_selector() {
+int gr_selector(int* name) {
   int type;
   int* constantVal;
+  int* entry;
+  int address;
+
+  entry = getVariable(name);
+
+  address = getAddress(entry);
 
   constantVal = malloc(2 * SIZEOFINT);
 
   type = gr_expression(constantVal);
 
-  if (*(constantVal) == 1) {
-    if (*(constantVal + 1) < 0) {
-      load_integer(*(constantVal + 1) * (-1));
-      emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
-    } else {
-      load_integer(*(constantVal + 1));
-    }
-  }
-
-  *(constantVal) = 0;
-  *(constantVal + 1) = 0;
-
   if (symbol == SYM_RBRACKET) {
 
     if (type == INT_T) {
-
       getSymbol();
 
-      load_integer(SIZEOFINT);
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          syntaxErrorMessage((int*)"Cannot access this array entry. No negative offset allowed.");
+        }
 
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
-      emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+        talloc();
 
-      tfree(1);
+        emitIFormat(OP_LW, getScope(entry), currentTemporary(), address);
+        address = *(constantVal + 1) * SIZEOFINT;
+        load_integer(address);
 
-      load_integer(0);
+      } else {
 
+        load_integer(SIZEOFINT);
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
+        emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+        emitIFormat(OP_LW, getScope(entry), currentTemporary(), address);
+      }
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+      tfree(1);
+      emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
+
+      *constantVal = 0;
+      *(constantVal + 1) = 0;
 
     } else {
       syntaxErrorSymbol(SYM_INT);
@@ -7493,8 +7500,9 @@ int main(int argc, int* argv) {
   print((int*) "Testing array now: ");
   println();
 
-  x = 3;
-//x = a[0];
+  *(a + 2) = 167;
+
+  x = a[2];
   print((int*) "x = 3: ");
   print(itoa(x, string_buffer, 10, 0, 0));
   println();
@@ -7502,12 +7510,12 @@ int main(int argc, int* argv) {
   print((int*) "Testing constant folding within array now: ");
   println();
 
-  x = 3;
+  x = 2;
   print((int*) "x = 3: ");
   print(itoa(x, string_buffer, 10, 0, 0));
   println();
 
-  x = 2 * x * x;
+  x = a[x];
   print((int*) "x = 2 * x * x: ");
   print(itoa(x, string_buffer, 10, 0, 0));
   println();
