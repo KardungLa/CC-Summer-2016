@@ -23,14 +23,17 @@ type             = "int" [ "*" ] .
 
 cast             = "(" type ")" .
 
-call             = identifier "(" [ expression { "," expression } ] ")" .
+selector         = "[" expression <constantVal> "]" .
+
+call             = identifier "(" [ expression <constantVal> { "," expression <constantVal> } ] ")" .
 
 literal          = integer | "'" ascii_character "'" .
 
 factor <constantVal>   = [ cast ] 
-                    ( [ "*" ] ( identifier | "(" expression ")" ) |
+                    ( [ "*" ] ( identifier | "(" expression <constantVal> ")" ) |
                       call |
                       literal |
+                      identifier selector |
                       """ { ascii_character } """ ) .
 
 term <constantVal>             = factor <constantVal> { ( "*" | "/" | "%" ) factor <constantVal> } .
@@ -39,29 +42,29 @@ simpleExpression <constantVal> = [ "-" ] term <constantVal> { ( "+" | "-" ) term
 
 shiftExpression <constantVal>  = simpleExpression <constantVal> { ("<<" | ">>") simpleExpression <constantVal> } .
 
-expression       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
+expression <constantVal>       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
 
-while            = "while" "(" expression ")" 
+while            = "while" "(" expression <constantVal> ")" 
                              ( statement |
                                "{" { statement } "}" ) .
 
-if               = "if" "(" expression ")" 
+if               = "if" "(" expression <constantVal> ")" 
                              ( statement | 
                                "{" { statement } "}" ) 
                          [ "else"
                              ( statement |
                                "{" { statement } "}" ) ] .
 
-return           = "return" [ expression ] .
+return           = "return" [ expression <constantVal> ] .
 
-statement        = ( [ "*" ] identifier | "*" "(" expression ")" ) "="
-                    expression ";" |
+statement        = ( [ "*" ] identifier | "*" "(" expression <constantVal> ")" "="
+                    expression <constantVal> ";" |
                     call ";" | 
                     while | 
                     if | 
                     return ";" .
 
-variable         = type identifier .
+variable         = type identifier [ selector ] .
 
 procedure        = "(" [ variable { "," variable } ] ")" 
                     ( ";" | "{" { variable ";" } { statement } "}" ) .

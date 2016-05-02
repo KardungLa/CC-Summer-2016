@@ -133,6 +133,8 @@ int CHAR_LPARENTHESIS = '(';
 int CHAR_RPARENTHESIS = ')';
 int CHAR_LBRACE       = '{';
 int CHAR_RBRACE       = '}';
+int CHAR_LBRACKET     = '[';
+int CHAR_RBRACKET     = ']';
 int CHAR_COMMA        = ',';
 int CHAR_LT           = '<';
 int CHAR_GT           = '>';
@@ -277,6 +279,8 @@ int SYM_CHARACTER    = 26; // character
 int SYM_STRING       = 27; // string
 int SYM_SL           = 28; // <<
 int SYM_SR           = 29; // >>
+int SYM_LBRACKET     = 30; // [
+int SYM_RBRACKET     = 31; // ]
 
 int* SYMBOLS; // array of strings representing symbols
 
@@ -308,7 +312,7 @@ int sourceFD    = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner() {
-  SYMBOLS = malloc(30 * SIZEOFINTSTAR);
+  SYMBOLS = malloc(32 * SIZEOFINTSTAR);
 
   *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
   *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
@@ -340,6 +344,8 @@ void initScanner() {
   *(SYMBOLS + SYM_STRING)       = (int) "string";
   *(SYMBOLS + SYM_SL)           = (int) "<<";
   *(SYMBOLS + SYM_SR)           = (int) ">>";
+  *(SYMBOLS + SYM_LBRACKET)     = (int) "[";
+  *(SYMBOLS + SYM_RBRACKET)     = (int) "]";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -498,12 +504,13 @@ int  gr_factor(int* constantVal);
 int  gr_term(int* constantVal);
 int  gr_simpleExpression(int* constantVal);
 int  gr_shiftExpression(int* constantVal);
-int  gr_expression();
+int  gr_expression(int* constantVal);
 void gr_while();
 void gr_if();
 void gr_return(int returnType);
 void gr_statement();
 int  gr_type();
+int  gr_selector();
 void gr_variable(int offset);
 void gr_initialization(int* name, int offset, int type);
 void gr_procedure(int* procedure, int returnType);
@@ -2001,6 +2008,15 @@ int getSymbol() {
     getCharacter();
 
     symbol = SYM_MOD;
+  } else if (character == CHAR_LBRACKET) {
+    getCharacter();
+
+    symbol = SYM_LBRACKET;
+
+  } else if (character == CHAR_RBRACKET) {
+    getCharacter();
+
+    symbol = SYM_RBRACKET;
 
   } else {
     printLineNumber((int*) "error", lineNumber);
@@ -2535,7 +2551,9 @@ int gr_call(int* procedure) {
   int* entry;
   int numberOfTemporaries;
   int type;
+  int* constantVal;
 
+  constantVal = malloc(2 * SIZEOFINT);
   // assert: n = allocatedTemporaries
 
   // library procedures override regular procedures for bootstrapping
@@ -2551,7 +2569,19 @@ int gr_call(int* procedure) {
   // assert: allocatedTemporaries == 0
 
   if (isExpression()) {
-    gr_expression();
+    gr_expression(constantVal);
+
+    if (*(constantVal) == 1) {
+      if (*(constantVal + 1) < 0) {
+        load_integer(*(constantVal + 1) * (-1));
+        emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+      } else {
+        load_integer(*(constantVal + 1));
+      }
+    }
+
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
     // TODO: check if types/number of parameters is correct
 
@@ -2564,7 +2594,19 @@ int gr_call(int* procedure) {
     while (symbol == SYM_COMMA) {
       getSymbol();
 
-      gr_expression();
+      gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       // push more parameters onto stack
       emitIFormat(OP_ADDIU, REG_SP, REG_SP, -WORDSIZE);
@@ -2639,7 +2681,19 @@ int gr_factor(int* constantVal) {
 
       // not a cast: "(" expression ")"
     } else {
-      type = gr_expression();
+      type = gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       if (symbol == SYM_RPARENTHESIS)
         getSymbol();
@@ -2666,7 +2720,19 @@ int gr_factor(int* constantVal) {
     } else if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      type = gr_expression();
+      type = gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       if (symbol == SYM_RPARENTHESIS)
         getSymbol();
@@ -2702,7 +2768,14 @@ int gr_factor(int* constantVal) {
 
       // reset return register
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
-    } else {
+    } else if (symbol == SYM_LBRACKET) {
+      getSymbol();
+
+      // selector: identifier "[" expression "]"
+      type = gr_selector(variableOrProcedureName);
+
+    } // todo selector
+    else {
       // variable access: identifier
       type = load_variable(variableOrProcedureName);
     }
@@ -2737,7 +2810,19 @@ int gr_factor(int* constantVal) {
   } else if (symbol == SYM_LPARENTHESIS) {
     getSymbol();
 
-    type = gr_expression();
+    type = gr_expression(constantVal);
+
+    if (*(constantVal) == 1) {
+      if (*(constantVal + 1) < 0) {
+        load_integer(*(constantVal + 1) * (-1));
+        emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+      } else {
+        load_integer(*(constantVal + 1));
+      }
+    }
+
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
     if (symbol == SYM_RPARENTHESIS)
       getSymbol();
@@ -3086,6 +3171,7 @@ int gr_shiftExpression(int* constantVal) {
   // assert: n = allocatedTemporaries
 
   ltype = gr_simpleExpression(constantVal);
+
   if (*(constantVal) == 1) {
     // constant
     constantTemp = *(constantVal + 1);
@@ -3171,25 +3257,25 @@ int gr_shiftExpression(int* constantVal) {
   return ltype;
 }
 
-int gr_expression() {
+int gr_expression(int* constantVal) {
   int ltype;
   int operatorSymbol;
   int rtype;
-  int* constantVal;
   int constantTemp;
+  int prevType;
 
+  prevType = 0;
   constantTemp = 0;
-  constantVal = malloc(2 * SIZEOFINT);
 
   // assert: n = allocatedTemporaries
   ltype = gr_shiftExpression(constantVal);
+
   if (*(constantVal) == 1) {
-    if (*(constantVal + 1) < 0) {
-      load_integer(*(constantVal + 1) * (-1));
-      emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
-    } else {
-      load_integer(*(constantVal + 1));
-    }
+    // constant
+    constantTemp = *(constantVal + 1);
+  } else {
+    prevType = 1;
+    // assert: allocatedTemporaries == n + 1
   }
 
   *(constantVal) = 0;
@@ -3204,80 +3290,295 @@ int gr_expression() {
     getSymbol();
 
     rtype = gr_shiftExpression(constantVal);
-    if (*(constantVal) == 1) {
-      if (*(constantVal + 1) < 0) {
-        load_integer(*(constantVal + 1) * (-1));
-        emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
-      } else {
-        load_integer(*(constantVal + 1));
-      }
-    }
 
-    *(constantVal) = 0;
-    *(constantVal + 1) = 0;
-
-    // assert: allocatedTemporaries == n + 2
+    // assert: allocatedTemporakries == n + 2
 
     if (ltype != rtype)
       typeWarning(ltype, rtype);
 
     if (operatorSymbol == SYM_EQUALITY) {
-      // subtract, if result = 0 then 1, else 0
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (constantTemp == *(constantVal + 1)) {
+            // assert: 1 (true)
+            constantTemp = 1;
+          } else {
+            // assert: 0 (false)
+            constantTemp = 0;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+        }
+      }
 
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      if (prevType == 1) {
+        // subtract, if result = 0 then 1, else 0
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+
+        tfree(1);
+
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 4);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      }
 
     } else if (operatorSymbol == SYM_NOTEQ) {
-      // subtract, if result = 0 then 0, else 1
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (constantTemp - * (constantVal + 1) == 0) {
+            // assert: 0 (false)
+            constantTemp = 0;
+          } else {
+            // assert: 1 (true)
+            constantTemp = 1;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+        }
+      }
 
-      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
-      emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      if (prevType == 1) {
+        // subtract, if result = 0 then 0, else 1
+        emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+
+        tfree(1);
+
+        emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+        emitIFormat(OP_BEQ, REG_ZR, currentTemporary(), 2);
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+      }
 
     } else if (operatorSymbol == SYM_LT) {
-      // set to 1 if a < b, else 0
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (constantTemp < * (constantVal + 1)) {
+            // assert: 1 (true)
+            constantTemp = 1;
+          } else {
+            // assert: 0 (false)
+            constantTemp = 0;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
+
+          // set to 1 if a < b, else 0
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+
+          // set to 1 if a < b, else 0
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+        } else {
+          prevType = 1;
+
+          // set to 1 if a < b, else 0
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+        }
+      }
 
     } else if (operatorSymbol == SYM_GT) {
-      // set to 1 if b < a, else 0
-      emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (constantTemp > *(constantVal + 1)) {
+            // assert: 1 (true)
+            constantTemp = 1;
+          } else {
+            // assert: 0 (false)
+            constantTemp = 0;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
+
+          // set to 1 if a < b, else 0
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+
+          // set to 1 if b < a, else 0
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+
+          tfree(1);
+
+        } else {
+          prevType = 1;
+
+          // set to 1 if b < a, else 0
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+
+          tfree(1);
+
+        }
+      }
+
 
     } else if (operatorSymbol == SYM_LEQ) {
-      // if b < a set 0, else 1
-      emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (*(constantVal + 1) <= constantTemp) {
+            // assert: 0 (false)
+            constantTemp = 0;
+          } else {
+            // assert: 1 (true)
+            constantTemp = 1;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
 
-      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
-      emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+          // if b < a set 0, else 1
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+
+          // if b < a set 0, else 1
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+
+        } else {
+          // if b < a set 0, else 1
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+          prevType = 1;
+        }
+      }
+
 
     } else if (operatorSymbol == SYM_GEQ) {
-      // if a < b set 0, else 1
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
 
-      tfree(1);
+      if (*(constantVal) == 1) {
+        if (prevType == 0) {
+          // compare constant with constant
+          if (constantTemp >= *(constantVal + 1)) {
+            // assert: 0 (false)
+            constantTemp = 0;
+          } else {
+            // assert: 1 (true)
+            constantTemp = 1;
+          }
+        } else {
+          load_integer(*(constantVal + 1));
+          prevType = 1;
 
-      emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
-      emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
-      emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+          // if a < b set 0, else 1
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+
+        }
+      } else {
+        if (prevType == 0) {
+          load_integer(constantTemp);
+          prevType = 1;
+
+          // if a < b set 0, else 1
+          emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+
+
+        } else {
+          prevType = 1;
+          // if a < b set 0, else 1
+          emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
+
+          tfree(1);
+
+          emitIFormat(OP_BNE, REG_ZR, currentTemporary(), 4);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
+          emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
+          emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
+
+        }
+      }
     }
   }
+
+  if (prevType == 0) {
+    *(constantVal) = 1;
+    *(constantVal + 1) = constantTemp;
+  } else {
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
+  }
+
   // assert: allocatedTemporaries == n + 1
 
   return ltype;
@@ -3286,6 +3587,10 @@ int gr_expression() {
 void gr_while() {
   int brBackToWhile;
   int brForwardToEnd;
+
+  int* constantVal;
+
+  constantVal = malloc(2 * SIZEOFINT);
 
   // assert: allocatedTemporaries == 0
 
@@ -3300,7 +3605,19 @@ void gr_while() {
     if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      gr_expression();
+      gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       // do not know where to branch, fixup later
       brForwardToEnd = binaryLength;
@@ -3352,6 +3669,10 @@ void gr_if() {
   int brForwardToElseOrEnd;
   int brForwardToEnd;
 
+  int* constantVal;
+
+  constantVal = malloc(2 * SIZEOFINT);
+
   // assert: allocatedTemporaries == 0
 
   // if ( expression )
@@ -3361,7 +3682,19 @@ void gr_if() {
     if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      gr_expression();
+      gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       // if the "if" case is not true, we jump to "else" (if provided)
       brForwardToElseOrEnd = binaryLength;
@@ -3440,6 +3773,10 @@ void gr_if() {
 void gr_return(int returnType) {
   int type;
 
+  int* constantVal;
+
+  constantVal = malloc(2 * SIZEOFINT);
+
   // assert: allocatedTemporaries == 0
 
   if (symbol == SYM_RETURN)
@@ -3449,7 +3786,19 @@ void gr_return(int returnType) {
 
   // optional: expression
   if (symbol != SYM_SEMICOLON) {
-    type = gr_expression();
+    type = gr_expression(constantVal);
+
+    if (*(constantVal) == 1) {
+      if (*(constantVal + 1) < 0) {
+        load_integer(*(constantVal + 1) * (-1));
+        emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+      } else {
+        load_integer(*(constantVal + 1));
+      }
+    }
+
+    *(constantVal) = 0;
+    *(constantVal + 1) = 0;
 
     if (returnType == VOID_T)
       typeWarning(type, returnType);
@@ -3478,7 +3827,9 @@ void gr_statement() {
   int rtype;
   int* variableOrProcedureName;
   int* entry;
+  int* constantVal;
 
+  constantVal = malloc(2 * SIZEOFINT);
   // assert: allocatedTemporaries == 0;
 
   while (lookForStatement()) {
@@ -3507,7 +3858,20 @@ void gr_statement() {
       if (symbol == SYM_ASSIGN) {
         getSymbol();
 
-        rtype = gr_expression();
+        rtype = gr_expression(constantVal);
+
+
+        if (*(constantVal) == 1) {
+          if (*(constantVal + 1) < 0) {
+            load_integer(*(constantVal + 1) * (-1));
+            emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+          } else {
+            load_integer(*(constantVal + 1));
+          }
+        }
+
+        *(constantVal) = 0;
+        *(constantVal + 1) = 0;
 
         if (rtype != INT_T)
           typeWarning(INT_T, rtype);
@@ -3527,7 +3891,19 @@ void gr_statement() {
     } else if (symbol == SYM_LPARENTHESIS) {
       getSymbol();
 
-      ltype = gr_expression();
+      ltype = gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       if (ltype != INTSTAR_T)
         typeWarning(INTSTAR_T, ltype);
@@ -3539,7 +3915,19 @@ void gr_statement() {
         if (symbol == SYM_ASSIGN) {
           getSymbol();
 
-          rtype = gr_expression();
+          rtype = gr_expression(constantVal);
+
+          if (*(constantVal) == 1) {
+            if (*(constantVal + 1) < 0) {
+              load_integer(*(constantVal + 1) * (-1));
+              emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+            } else {
+              load_integer(*(constantVal + 1));
+            }
+          }
+
+          *(constantVal) = 0;
+          *(constantVal + 1) = 0;
 
           if (rtype != INT_T)
             typeWarning(INT_T, rtype);
@@ -3587,7 +3975,19 @@ void gr_statement() {
 
       getSymbol();
 
-      rtype = gr_expression();
+      rtype = gr_expression(constantVal);
+
+      if (*(constantVal) == 1) {
+        if (*(constantVal + 1) < 0) {
+          load_integer(*(constantVal + 1) * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(*(constantVal + 1));
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
 
       if (ltype != rtype)
         typeWarning(ltype, rtype);
@@ -3639,6 +4039,52 @@ int gr_type() {
     }
   } else
     syntaxErrorSymbol(SYM_INT);
+
+  return type;
+}
+
+int gr_selector() {
+  int type;
+  int* constantVal;
+
+  constantVal = malloc(2 * SIZEOFINT);
+
+  type = gr_expression(constantVal);
+
+  if (*(constantVal) == 1) {
+    if (*(constantVal + 1) < 0) {
+      load_integer(*(constantVal + 1) * (-1));
+      emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+    } else {
+      load_integer(*(constantVal + 1));
+    }
+  }
+
+  *(constantVal) = 0;
+  *(constantVal + 1) = 0;
+
+  if (symbol == SYM_RBRACKET) {
+
+    if (type == INT_T) {
+
+      getSymbol();
+
+      load_integer(SIZEOFINT);
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
+      emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+
+      tfree(1);
+
+      load_integer(0);
+
+      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+
+    } else {
+      syntaxErrorSymbol(SYM_INT);
+    }
+
+  } else syntaxErrorSymbol(SYM_INT);
 
   return type;
 }
@@ -7024,6 +7470,9 @@ int selfie(int argc, int* argv) {
 int main(int argc, int* argv) {
   int x;
   int y;
+  int* a;
+  a = malloc(10 * 4);
+
   initLibrary();
 
   initScanner();
@@ -7040,7 +7489,17 @@ int main(int argc, int* argv) {
 
   print((int*) "This is USEG Selfie");
   println();
-  print((int*) "Testing constant folding now: ");
+
+  print((int*) "Testing array now: ");
+  println();
+
+  x = 3;
+//x = a[0];
+  print((int*) "x = 3: ");
+  print(itoa(x, string_buffer, 10, 0, 0));
+  println();
+
+  print((int*) "Testing constant folding within array now: ");
   println();
 
   x = 3;
