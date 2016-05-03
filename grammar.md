@@ -29,7 +29,7 @@ call             = identifier "(" [ expression <constantVal> { "," expression <c
 
 literal          = integer | "'" ascii_character "'" .
 
-factor <constantVal>   = [ cast ] 
+factor <constantVal>   = [ cast ]
                     ( [ "*" ] ( identifier | "(" expression <constantVal> ")" ) |
                       call |
                       literal |
@@ -44,29 +44,30 @@ shiftExpression <constantVal>  = simpleExpression <constantVal> { ("<<" | ">>") 
 
 expression <constantVal>       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
 
-while            = "while" "(" expression <constantVal> ")" 
+while            = "while" "(" expression <constantVal> ")"
                              ( statement |
                                "{" { statement } "}" ) .
 
-if               = "if" "(" expression <constantVal> ")" 
-                             ( statement | 
-                               "{" { statement } "}" ) 
+if               = "if" "(" expression <constantVal> ")"
+                             ( statement |
+                               "{" { statement } "}" )
                          [ "else"
                              ( statement |
                                "{" { statement } "}" ) ] .
 
 return           = "return" [ expression <constantVal> ] .
 
-statement        = ( [ "*" ] identifier | "*" "(" expression <constantVal> ")" "="
+statement        = ( [ "*" ] identifier | "*" "(" expression <constantVal> ")" | identifier [selector] "=" //different from right side, TODO: adjust grammar
                     expression <constantVal> ";" |
-                    call ";" | 
-                    while | 
-                    if | 
+                    identifier "[" expression "]" ";" |
+                    call ";" |
+                    while |
+                    if |
                     return ";" .
 
 variable         = type identifier [ selector ] .
 
-procedure        = "(" [ variable { "," variable } ] ")" 
+procedure        = "(" [ variable { "," variable } ] ")"
                     ( ";" | "{" { variable ";" } { statement } "}" ) .
 
 cstar            = { type identifier [ "=" [ cast ] [ "-" ] literal ] ";" |
