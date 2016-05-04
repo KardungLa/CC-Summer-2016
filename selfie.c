@@ -292,6 +292,8 @@ int maxStringLength     = 128; // maximum number of characters in a string
 
 int lineNumber = 1; // current Line Number for error reporting
 
+//@team
+int x[10];
 int* identifier = (int*) 0; // stores scanned identifier as string
 int* integer    = (int*) 0; // stores scanned integer as string
 int* string     = (int*) 0; // stores scanned string
@@ -3836,6 +3838,7 @@ void gr_statement() {
   int* variableOrProcedureName;
   int* entry;
   int* constantVal;
+  int address;
 
   constantVal = malloc(2 * SIZEOFINT);
   // assert: allocatedTemporaries == 0;
@@ -3961,8 +3964,78 @@ void gr_statement() {
 
     getSymbol();
 
-    // call
-    if (symbol == SYM_LPARENTHESIS) {
+    if (symbol == SYM_LBRACKET) {
+
+      entry = getVariable(variableOrProcedureName);
+
+      address = getAddress(entry);
+
+      constantVal = malloc(2 * SIZEOFINT);
+
+      getSymbol();
+
+      ltype = gr_expression(constantVal);
+
+      if (symbol == SYM_RBRACKET) {
+        if (ltype == INT_T) {
+
+          if (*(constantVal) == 1) {
+            if (*(constantVal + 1) < 0) {
+              syntaxErrorMessage((int*)"Cannot access this array entry. No negative offset allowed.");
+            }
+
+            talloc();
+            emitIFormat(OP_LW, getScope(entry), currentTemporary(), address);
+            address = *(constantVal + 1) * SIZEOFINT;
+            load_integer(address);
+            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+            tfree(1);
+          } else {
+            load_integer(SIZEOFINT);
+            emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), 0, FCT_MULTU);
+            emitRFormat(OP_SPECIAL, 0, 0, previousTemporary(), FCT_MFLO);
+            emitIFormat(OP_LW, getScope(entry), currentTemporary(), address);
+          }
+          getSymbol();
+
+          if (symbol == SYM_ASSIGN) {
+            getSymbol();
+
+            rtype = gr_expression(constantVal);
+
+            if (*(constantVal) == 1) {
+              if (*(constantVal + 1) < 0) {
+                load_integer(*(constantVal + 1) * (-1));
+                emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+              } else {
+                load_integer(*(constantVal + 1));
+
+              }
+            }
+
+            *(constantVal) = 0;
+            *(constantVal + 1) = 0;
+            //if (ltype != rtype)
+            //    typeWarning(ltype, rtype);
+
+            emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
+
+            tfree(2);
+            if (symbol == SYM_SEMICOLON)
+              getSymbol();
+            else
+              syntaxErrorSymbol(SYM_SEMICOLON);
+          } else {
+            syntaxErrorUnexpected();
+          }
+        } else {
+          syntaxErrorSymbol(SYM_INT);
+        }
+
+      } else syntaxErrorSymbol(SYM_INT);
+
+    } else if (symbol == SYM_LPARENTHESIS) {
+      // call
       getSymbol();
 
       gr_call(variableOrProcedureName);
@@ -4053,6 +4126,7 @@ int gr_type() {
 
 int gr_selector(int* name) {
   int type;
+  int selectorType;
   int* constantVal;
   int* entry;
   int address;
@@ -4061,6 +4135,7 @@ int gr_selector(int* name) {
 
   address = getAddress(entry);
 
+  selectorType = getType(entry);
   constantVal = malloc(2 * SIZEOFINT);
 
   type = gr_expression(constantVal);
@@ -4079,8 +4154,13 @@ int gr_selector(int* name) {
 
         emitIFormat(OP_LW, getScope(entry), currentTemporary(), address);
         address = *(constantVal + 1) * SIZEOFINT;
-        load_integer(address);
 
+        if (address < 0) {
+          load_integer(address * (-1));
+          emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+        } else {
+          load_integer(address);
+        }
       } else {
 
         load_integer(SIZEOFINT);
@@ -4090,6 +4170,7 @@ int gr_selector(int* name) {
       }
       emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
       tfree(1);
+
       emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
 
       *constantVal = 0;
@@ -4123,25 +4204,25 @@ void gr_variable(int offset) {
       } else {
         type = INTSTARARRAY_T;
       }
-    selectorType = gr_factor(constantVal);
-    if (selectorType == INT_T){
-    if (*constantVal == 1) {
-      size = *(constantVal + 1);
+      selectorType = gr_factor(constantVal);
+      if (selectorType == INT_T) {
+        if (*(constantVal) == 1) {
+          size = *(constantVal + 1);
+        }
+        if (symbol == SYM_RBRACKET) {
+          getSymbol();
+        }
+      } else {
+        syntaxErrorMessage((int*)"int expected but other type found");
+      }
     }
-    if (symbol == SYM_RBRACKET) {
-      getSymbol();
-    }
+    createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset - (size * SIZEOFINT), size);
+
   } else {
-    syntaxErrorMessage((int*)"int expected but other type found");
-  }
-  }
-  createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset - size, size);
+    syntaxErrorSymbol(SYM_IDENTIFIER);
 
-} else {
-  syntaxErrorSymbol(SYM_IDENTIFIER);
-
-  createSymbolTableEntry(LOCAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, offset - size, size);
-}
+    createSymbolTableEntry(LOCAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, offset - size, size);
+  }
 }
 
 void gr_initialization(int* name, int offset, int type) {
@@ -4312,8 +4393,12 @@ void gr_procedure(int* procedure, int returnType) {
 
     while (symbol == SYM_INT) {
       localVariables = localVariables + 1;
-
       gr_variable(-localVariables * WORDSIZE);
+
+      entry = getSymbolTableEntry(identifier, VARIABLE);
+
+      if (getType(entry) == INTARRAY_T)
+	      localVariables = localVariables + getSize(entry) - 1;
 
       if (symbol == SYM_SEMICOLON)
         getSymbol();
@@ -4354,6 +4439,9 @@ void gr_procedure(int* procedure, int returnType) {
 void gr_cstar() {
   int type;
   int* variableOrProcedureName;
+  int selectorType;
+  int size;
+  int* constantVal;
 
   while (symbol != SYM_EOF) {
     while (lookForType()) {
@@ -4392,10 +4480,32 @@ void gr_cstar() {
           gr_procedure(variableOrProcedureName, type);
         else {
           allocatedMemory = allocatedMemory + WORDSIZE;
+            if (symbol == SYM_LBRACKET) {
+              constantVal = malloc(2 * SIZEOFINT);
+              getSymbol();
+              if (type == INT_T) {
+                type = INTARRAY_T;
+              } else {
+                type = INTSTARARRAY_T;
+              }
+              selectorType = gr_factor(constantVal);
+              if (selectorType == INT_T) {
+                if (*(constantVal) == 1) {
+                  size = *(constantVal + 1);
+                }
+                if (symbol == SYM_RBRACKET) {
+                  getSymbol();
+                }
+              } else {
+                syntaxErrorMessage((int*)"int expected but other type found");
+              }
+              allocatedMemory = allocatedMemory + size * WORDSIZE - WORDSIZE;
+            }
 
           // type identifier ";" global variable declaration
           if (symbol == SYM_SEMICOLON) {
-            createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, VARIABLE, type, 0, -allocatedMemory, 0);
+            //   createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset - (size * SIZEOFINT), size);
+            createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, VARIABLE, type, 0, -allocatedMemory, size);
 
             getSymbol();
 
@@ -7507,10 +7617,8 @@ int selfie(int argc, int* argv) {
 }
 
 int main(int argc, int* argv) {
-  int x;
-  int y[10];
-  int* a;
-  a = malloc(10 * 4);
+  //int y[10];
+  int a;
 
   initLibrary();
 
@@ -7520,6 +7628,11 @@ int main(int argc, int* argv) {
   initDecoder();
 
   initInterpreter();
+  x[0] = 20;
+  a = x[0];
+  print((int*) "[10] a = ");
+  print(itoa((int) x[0], string_buffer, 10, 0, 0));
+  println();
 
   selfieName = (int*) *argv;
 
@@ -7532,55 +7645,6 @@ int main(int argc, int* argv) {
   print((int*) "Testing array now: ");
   println();
 
-  *(a + 2) = 167;
-
-  x = a[2];
-  print((int*) "x = 3: ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Testing constant folding within array now: ");
-  println();
-
-  x = 2;
-  print((int*) "x = 3: ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  x = a[x];
-  print((int*) "x = 2 * x * x: ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  y[2] = x * 2;
-  print((int*) "y = x * 2 ");
-  print(itoa(y, string_buffer, 10, 0, 0));
-  println();
-
-  x = x / 2 * 3 % 5;
-  print((int*) "x = x / 2 * 3 % 5 ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  x = 3;
-  print((int*) "x = 3: ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  x = 2 + x - 2 * 3;
-  print((int*) "x = 2 + x - 2 * 3: ");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
-
-  y[2] = x + 2 * 3 / 2;
-  print((int*) "y = x + 2 * 3 / 2:");
-  print(itoa(y, string_buffer, 10, 0, 0));
-  println();
-
-  x = x / 2 << 3 % 5;
-  print((int*) "x = x / 2 << 3 % 5");
-  print(itoa(x, string_buffer, 10, 0, 0));
-  println();
 
   if (selfie(argc, (int*) argv) != 0) {
     print(selfieName);
