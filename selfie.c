@@ -284,6 +284,8 @@ int SYM_RBRACKET     = 31; // ]
 
 int* SYMBOLS; // array of strings representing symbols
 
+int symbolsarray[10];
+
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
 int maxIntegerLength    = 10; // maximum number of characters in an integer
 int maxStringLength     = 128; // maximum number of characters in a string
@@ -407,7 +409,6 @@ int  getAddress(int* entry)    {
 int  getScope(int* entry)      {
   return *(entry + 7);
 }
-
 int  getSize(int* entry)      {
   return *(entry + 8);
 }
@@ -4109,20 +4110,20 @@ int gr_selector(int* name) {
       }
 
       load_integer(*(constantVal + 1));
-
-      if (symbol == SYM_RBRACKET) {
-        getSymbol();
-      } else
-        syntaxErrorSymbol(SYM_RBRACKET);
-
-      emitLeftShiftBy(2);
-      emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
-
-      tfree(1);
-
-      type = INT_T;
-
     }
+
+    if (symbol == SYM_RBRACKET) {
+      getSymbol();
+    } else
+      syntaxErrorSymbol(SYM_RBRACKET);
+
+    emitLeftShiftBy(2);
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
+
+    tfree(1);
+
+    type = INT_T;
+
   } else
     syntaxErrorSymbol(SYM_INT);
 
@@ -4282,7 +4283,11 @@ void gr_procedure(int* procedure, int returnType) {
         // 8 bytes offset to skip frame pointer and link
         setAddress(entry, parameters * WORDSIZE + 2 * WORDSIZE);
 
-        parameters = parameters + 1;
+        if (getClass(entry) == INTARRAY_T)
+          parameters = parameters + getSize(entry);
+        else
+          parameters = parameters + 1;
+
         entry      = getNextEntry(entry);
       }
 
@@ -4423,37 +4428,33 @@ void gr_cstar() {
         if (symbol == SYM_LPARENTHESIS)
           gr_procedure(variableOrProcedureName, type);
         else if (symbol == SYM_LBRACKET) {
-          if (symbol == SYM_LBRACKET) {
-            constantVal = malloc(2 * SIZEOFINT);
-            getSymbol();
-            if (type == INT_T) {
-              type = INTARRAY_T;
-            } else {
-              type = INTSTARARRAY_T;
-            }
-            selectorType = gr_factor(constantVal);
-            if (selectorType == INT_T) {
-              if (*(constantVal) == 1) {
-                size = *(constantVal + 1);
-              }
-
-              allocatedMemory = allocatedMemory + (size * WORDSIZE);
-              createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, VARIABLE, type, 0, -allocatedMemory, size);
-
-              if (symbol == SYM_RBRACKET) {
-                getSymbol();
-              } else
-                syntaxErrorSymbol(SYM_RBRACKET);
-
-              if (symbol == SYM_SEMICOLON) {
-                getSymbol();
-              }
-
-            } else {
-              syntaxErrorMessage((int*)"int expected but other type found");
-            }
-
+          constantVal = malloc(2 * SIZEOFINT);
+          if (type == INT_T) {
+            type = INTARRAY_T;
+          } else {
+            type = INTSTARARRAY_T;
           }
+          getSymbol();
+          selectorType = gr_factor(constantVal);
+          if (selectorType == INT_T) {
+            if (*(constantVal) == 1) {
+              size = *(constantVal + 1);
+            }
+            allocatedMemory = allocatedMemory + (size * WORDSIZE);
+            createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, VARIABLE, type, 0, -allocatedMemory, size);
+            if (symbol == SYM_RBRACKET) {
+              getSymbol();
+            } else
+              syntaxErrorSymbol(SYM_RBRACKET);
+
+            if (symbol == SYM_SEMICOLON) {
+              getSymbol();
+            }
+
+          } else {
+            syntaxErrorMessage((int*)"int expected but other type found");
+          }
+
         } else {
           allocatedMemory = allocatedMemory + WORDSIZE;
 
@@ -4924,9 +4925,13 @@ void emitGlobalsStrings() {
   // allocate space for global variables and copy strings
   while ((int) entry != 0) {
     if (getClass(entry) == VARIABLE) {
-      storeBinary(binaryLength, getValue(entry));
 
-      binaryLength = binaryLength + WORDSIZE;
+      //todo: allocate arrays correctly
+      storeBinary(binaryLength, getValue(entry));
+      if (getSize(entry) == 0)
+        binaryLength = binaryLength + WORDSIZE;
+      else
+        binaryLength = binaryLength + getSize(entry) * WORDSIZE;
     } else if (getClass(entry) == STRING)
       binaryLength = copyStringToBinary(getString(entry), binaryLength);
 
@@ -7571,8 +7576,9 @@ int selfie(int argc, int* argv) {
 }
 
 int main(int argc, int* argv) {
+  int z;
   int x[10];
-
+  int y[10];
   initLibrary();
 
   initScanner();
@@ -7593,25 +7599,33 @@ int main(int argc, int* argv) {
   print((int*) "Testing array now: ");
   println();
 
-  x[0] = 1409;
+  z = 0;
+  x[z] = 1409;
   x[1] = 1000;
   x[2] = x[1];
   x[3] = x[2] + 5000;
+//  symbolsarray[0] = 42;
+  //y[0] = 1409;
+//x[2] = 3333;
 
-  print((int*) " x[0] = ");
+  print((int*) "[1409] x[0] = ");
   print(itoa((int) x[0], string_buffer, 10, 0, 0));
   println();
 
-  print((int*) " x[1] = ");
+  print((int*) "[1000] x[1] = ");
   print(itoa((int) x[1], string_buffer, 10, 0, 0));
   println();
 
-  print((int*) " x[2] = ");
+  print((int*) "[1000] x[2] = ");
   print(itoa((int) x[2], string_buffer, 10, 0, 0));
   println();
-  
-  print((int*) " x[3] = ");
+
+  print((int*) "[6000] x[3] = ");
   print(itoa((int) x[3], string_buffer, 10, 0, 0));
+  println();
+
+  print((int*) "[42] x[0] = ");
+  print(itoa((int) symbolsarray[0], string_buffer, 10, 0, 0));
   println();
 
   if (selfie(argc, (int*) argv) != 0) {
