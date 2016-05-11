@@ -282,9 +282,9 @@ int SYM_SR           = 29; // >>
 int SYM_LBRACKET     = 30; // [
 int SYM_RBRACKET     = 31; // ]
 
-int* SYMBOLS; // array of strings representing symbols
+//int* SYMBOLS; // array of strings representing symbols
 
-int symbolsarray[10];
+int SYMBOLS[32];
 
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
 int maxIntegerLength    = 10; // maximum number of characters in an integer
@@ -314,40 +314,40 @@ int sourceFD    = 0;        // file descriptor of open source file
 // ------------------------- INITIALIZATION ------------------------
 
 void initScanner() {
-  SYMBOLS = malloc(32 * SIZEOFINTSTAR);
+  //SYMBOLS = malloc(32 * SIZEOFINTSTAR);
 
-  *(SYMBOLS + SYM_IDENTIFIER)   = (int) "identifier";
-  *(SYMBOLS + SYM_INTEGER)      = (int) "integer";
-  *(SYMBOLS + SYM_VOID)         = (int) "void";
-  *(SYMBOLS + SYM_INT)          = (int) "int";
-  *(SYMBOLS + SYM_SEMICOLON)    = (int) ";";
-  *(SYMBOLS + SYM_IF)           = (int) "if";
-  *(SYMBOLS + SYM_ELSE)         = (int) "else";
-  *(SYMBOLS + SYM_PLUS)         = (int) "+";
-  *(SYMBOLS + SYM_MINUS)        = (int) "-";
-  *(SYMBOLS + SYM_ASTERISK)     = (int) "*";
-  *(SYMBOLS + SYM_DIV)          = (int) "/";
-  *(SYMBOLS + SYM_EQUALITY)     = (int) "==";
-  *(SYMBOLS + SYM_ASSIGN)       = (int) "=";
-  *(SYMBOLS + SYM_LPARENTHESIS) = (int) "(";
-  *(SYMBOLS + SYM_RPARENTHESIS) = (int) ")";
-  *(SYMBOLS + SYM_LBRACE)       = (int) "{";
-  *(SYMBOLS + SYM_RBRACE)       = (int) "}";
-  *(SYMBOLS + SYM_WHILE)        = (int) "while";
-  *(SYMBOLS + SYM_RETURN)       = (int) "return";
-  *(SYMBOLS + SYM_COMMA)        = (int) ",";
-  *(SYMBOLS + SYM_LT)           = (int) "<";
-  *(SYMBOLS + SYM_LEQ)          = (int) "<=";
-  *(SYMBOLS + SYM_GT)           = (int) ">";
-  *(SYMBOLS + SYM_GEQ)          = (int) ">=";
-  *(SYMBOLS + SYM_NOTEQ)        = (int) "!=";
-  *(SYMBOLS + SYM_MOD)          = (int) "%";
-  *(SYMBOLS + SYM_CHARACTER)    = (int) "character";
-  *(SYMBOLS + SYM_STRING)       = (int) "string";
-  *(SYMBOLS + SYM_SL)           = (int) "<<";
-  *(SYMBOLS + SYM_SR)           = (int) ">>";
-  *(SYMBOLS + SYM_LBRACKET)     = (int) "[";
-  *(SYMBOLS + SYM_RBRACKET)     = (int) "]";
+  SYMBOLS[SYM_IDENTIFIER]   = (int) "identifier";
+  SYMBOLS[SYM_INTEGER]      = (int) "integer";
+  SYMBOLS[SYM_VOID]         = (int) "void";
+  SYMBOLS[SYM_INT]          = (int) "int";
+  SYMBOLS[SYM_SEMICOLON]    = (int) ";";
+  SYMBOLS[SYM_IF]           = (int) "if";
+  SYMBOLS[SYM_ELSE]         = (int) "else";
+  SYMBOLS[SYM_PLUS]         = (int) "+";
+  SYMBOLS[SYM_MINUS]        = (int) "-";
+  SYMBOLS[SYM_ASTERISK]     = (int) "*";
+  SYMBOLS[SYM_DIV]          = (int) "/";
+  SYMBOLS[SYM_EQUALITY]     = (int) "==";
+  SYMBOLS[SYM_ASSIGN]       = (int) "=";
+  SYMBOLS[SYM_LPARENTHESIS] = (int) "(";
+  SYMBOLS[SYM_RPARENTHESIS] = (int) ")";
+  SYMBOLS[SYM_LBRACE]       = (int) "{";
+  SYMBOLS[SYM_RBRACE]       = (int) "}";
+  SYMBOLS[SYM_WHILE]        = (int) "while";
+  SYMBOLS[SYM_RETURN]       = (int) "return";
+  SYMBOLS[SYM_COMMA]        = (int) ",";
+  SYMBOLS[SYM_LT]           = (int) "<";
+  SYMBOLS[SYM_LEQ]          = (int) "<=";
+  SYMBOLS[SYM_GT]           = (int) ">";
+  SYMBOLS[SYM_GEQ]          = (int) ">=";
+  SYMBOLS[SYM_NOTEQ]        = (int) "!=";
+  SYMBOLS[SYM_MOD]          = (int) "%";
+  SYMBOLS[SYM_CHARACTER]    = (int) "character";
+  SYMBOLS[SYM_STRING]       = (int) "string";
+  SYMBOLS[SYM_SL]           = (int) "<<";
+  SYMBOLS[SYM_SR]           = (int) ">>";
+  SYMBOLS[SYM_LBRACKET]     = (int) "[";
+  SYMBOLS[SYM_RBRACKET]     = (int) "]";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
@@ -518,7 +518,6 @@ void gr_if();
 void gr_return(int returnType);
 void gr_statement();
 int  gr_type();
-int  gr_selector(int* name);
 void gr_variable(int offset);
 void gr_initialization(int* name, int offset, int type);
 void gr_procedure(int* procedure, int returnType);
@@ -1606,7 +1605,7 @@ void printSymbol(int symbol) {
   if (symbol == SYM_EOF)
     print((int*) "end of file");
   else
-    print((int*) * (SYMBOLS + symbol));
+    print((int*) SYMBOLS[symbol]);
 
   putCharacter(CHAR_DOUBLEQUOTE);
 }
@@ -1766,7 +1765,7 @@ int isNotDoubleQuoteOrEOF() {
 }
 
 int identifierStringMatch(int keyword) {
-  return stringCompare(identifier, (int*) * (SYMBOLS + keyword));
+  return stringCompare(identifier, (int*)SYMBOLS[keyword]);
 }
 
 int identifierOrKeyword() {
@@ -2655,9 +2654,10 @@ int gr_factor(int* constantVal) {
   int hasCast;
   int cast;
   int type;
-
+  int* entry;
+  int address;
   int* variableOrProcedureName;
-
+  int* selectorVal;
   // assert: n = allocatedTemporaries
 
   hasCast = 0;
@@ -2780,16 +2780,53 @@ int gr_factor(int* constantVal) {
     } else if (symbol == SYM_LBRACKET) {
       getSymbol();
 
-      // selector: identifier "[" expression "]"
-      type = gr_selector(variableOrProcedureName);
+      // array: identifier "[" expression "]"
 
-      // dereference
-      emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
+      entry = getVariable(variableOrProcedureName);
+
+      selectorVal = malloc(2 * SIZEOFINT);
+      type = gr_expression(selectorVal);
+
+      if (type == INT_T) {
+        if (*selectorVal == 1) {
+          if (*(selectorVal + 1) < 0) {
+            syntaxErrorMessage((int*)"Cannot access this array entry. No negative offset allowed.");
+          }
+
+          talloc();
+          emitIFormat(OP_LW, getScope(entry), currentTemporary(), getAddress(entry) - * (selectorVal + 1) * 4);
+        } else {
+          talloc();
+          emitIFormat(OP_ADDIU, REG_ZR, nextTemporary(), 2);
+
+          emitRFormat(OP_SPECIAL, nextTemporary(), currentTemporary(), currentTemporary(), FCT_SLLV);
+
+          emitIFormat(OP_ADDIU, REG_ZR, nextTemporary(), getAddress(entry));
+          emitRFormat(OP_SPECIAL, nextTemporary(), currentTemporary(), currentTemporary(), FCT_SUBU);
+
+          emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), FCT_ADDU);
+
+          emitIFormat(OP_LW, currentTemporary(), currentTemporary(), 0);
+        }
+
+        if (symbol == SYM_RBRACKET) {
+          getSymbol();
+        } else
+          syntaxErrorSymbol(SYM_RBRACKET);
+
+      } else
+        syntaxErrorSymbol(SYM_INT);
 
     } // array
     else {
       // variable access: identifier
-      type = load_variable(variableOrProcedureName);
+      entry = getVariable(variableOrProcedureName);
+      if (getType(entry) == INTARRAY_T) {
+        talloc();
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), getAddress(entry));
+        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), FCT_ADDU);
+      } else
+        type = load_variable(variableOrProcedureName);
     }
   } else if (symbol == SYM_INTEGER) {
     //pass value up to gr_term for constant folding
@@ -3841,6 +3878,10 @@ void gr_statement() {
   int* entry;
   int* constantVal;
   int address;
+  int constantTemp;
+  int isConstant;
+
+  isConstant = 0;
 
   constantVal = malloc(2 * SIZEOFINT);
   // assert: allocatedTemporaries == 0;
@@ -3967,15 +4008,28 @@ void gr_statement() {
     getSymbol();
 
     if (symbol == SYM_LBRACKET) {
+      // array: identifier "[" expression "]"
+
+      entry = getVariable(variableOrProcedureName);
 
       getSymbol();
 
-      // selector: identifier "[" expression "]"
-      ltype = gr_selector(variableOrProcedureName);
+      ltype = gr_expression(constantVal);
+
+      if (ltype == INT_T) {
+        if (*constantVal == 1) {
+          constantTemp = *(constantVal + 1);
+          isConstant = 1;
+        }
+      }
+
+      *(constantVal) = 0;
+      *(constantVal + 1) = 0;
+
+      getSymbol();
 
       if (symbol == SYM_ASSIGN) {
         getSymbol();
-
         rtype = gr_expression(constantVal);
 
         if (*(constantVal) == 1) {
@@ -3987,10 +4041,19 @@ void gr_statement() {
           }
         }
 
-        *(constantVal) = 0;
-        *(constantVal + 1) = 0;
+        if (isConstant == 1) {
+          talloc();
+          emitIFormat(OP_SW, getScope(entry), previousTemporary(), getAddress(entry) - constantTemp * 4);
+        } else {
+          emitIFormat(OP_ADDIU, REG_ZR, nextTemporary(), 2);
+          emitRFormat(OP_SPECIAL, nextTemporary(), previousTemporary(), previousTemporary(), FCT_SLLV);
 
-        emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
+          emitIFormat(OP_ADDIU, REG_ZR, nextTemporary(), getAddress(entry));
+          emitRFormat(OP_SPECIAL, nextTemporary(), previousTemporary(), previousTemporary(), FCT_SUBU);
+
+          emitRFormat(OP_SPECIAL, getScope(entry), previousTemporary(), previousTemporary(), FCT_ADDU);
+          emitIFormat(OP_SW, previousTemporary(), currentTemporary(), 0);
+        }
 
         tfree(2);
         if (symbol == SYM_SEMICOLON)
@@ -3998,7 +4061,6 @@ void gr_statement() {
         else
           syntaxErrorSymbol(SYM_SEMICOLON);
       }
-
 
     } else if (symbol == SYM_LPARENTHESIS) {
       // call
@@ -4088,47 +4150,6 @@ int gr_type() {
     syntaxErrorSymbol(SYM_INT);
 
   return type;
-}
-
-int gr_selector(int* name) {
-  int type;
-  int* constantVal;
-
-  constantVal = malloc(2 * SIZEOFINT);
-
-  type = load_variable(name);
-
-  if (type != INTARRAY_T)
-    typeWarning(INTARRAY_T, type);
-
-  type = gr_expression(constantVal);
-
-  if (type == INT_T) {
-    if (*constantVal == 1) {
-      if (*(constantVal + 1) < 0) {
-        syntaxErrorMessage((int*)"Cannot access this array entry. No negative offset allowed.");
-      }
-
-      load_integer(*(constantVal + 1));
-    }
-
-    if (symbol == SYM_RBRACKET) {
-      getSymbol();
-    } else
-      syntaxErrorSymbol(SYM_RBRACKET);
-
-    emitLeftShiftBy(2);
-    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
-
-    tfree(1);
-
-    type = INT_T;
-
-  } else
-    syntaxErrorSymbol(SYM_INT);
-
-  return type;
-
 }
 
 void gr_variable(int offset) {
@@ -4283,10 +4304,7 @@ void gr_procedure(int* procedure, int returnType) {
         // 8 bytes offset to skip frame pointer and link
         setAddress(entry, parameters * WORDSIZE + 2 * WORDSIZE);
 
-        if (getClass(entry) == INTARRAY_T)
-          parameters = parameters + getSize(entry);
-        else
-          parameters = parameters + 1;
+        parameters = parameters + 1;
 
         entry      = getNextEntry(entry);
       }
@@ -7599,17 +7617,16 @@ int main(int argc, int* argv) {
   print((int*) "Testing array now: ");
   println();
 
-  z = 0;
+  z = 2;
   x[z] = 1409;
   x[1] = 1000;
   x[2] = x[1];
   x[3] = x[2] + 5000;
-//  symbolsarray[0] = 42;
-  //y[0] = 1409;
-//x[2] = 3333;
+  y[0] = 1409;
+  x[2] = 3333;
 
   print((int*) "[1409] x[0] = ");
-  print(itoa((int) x[0], string_buffer, 10, 0, 0));
+  print(itoa((int) x[z], string_buffer, 10, 0, 0));
   println();
 
   print((int*) "[1000] x[1] = ");
@@ -7622,10 +7639,6 @@ int main(int argc, int* argv) {
 
   print((int*) "[6000] x[3] = ");
   print(itoa((int) x[3], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "[42] x[0] = ");
-  print(itoa((int) symbolsarray[0], string_buffer, 10, 0, 0));
   println();
 
   if (selfie(argc, (int*) argv) != 0) {
