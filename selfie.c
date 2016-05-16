@@ -288,6 +288,17 @@ int SYMBOLS[33][2];
 int globalarray1dim[10];
 int globalarray2dim[10][2];
 
+struct globalstruct {
+  int a;
+  int b;
+  int* aa;
+  int array1[10];
+  int array2[10][2];
+  struct globalstruct* next;
+};
+
+struct globalstruct* next;
+
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
 int maxIntegerLength    = 10; // maximum number of characters in an integer
 int maxStringLength     = 128; // maximum number of characters in a string
@@ -451,11 +462,11 @@ void setAddress(int* entry, int address)    {
 void setScope(int* entry, int scope)        {
   *(entry + 7) = scope;
 }
-void setSize(int* entry, int scope)        {
-  *(entry + 8) = scope;
+void setSize(int* entry, int size)        {
+  *(entry + 8) = size;
 }
-void setSize2d(int* entry, int scope)        {
-  *(entry + 9) = scope;
+void setSize2d(int* entry, int size)        {
+  *(entry + 9) = size;
 }
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
@@ -505,6 +516,8 @@ int isPlusOrMinus();
 int isComparison();
 int isShiftOperator();
 
+void checkRbracket();
+int isStructStar(int type);
 
 int lookForFactor();
 int lookForStatement();
@@ -2307,6 +2320,24 @@ int lookForType() {
     return 0;
   else
     return 1;
+}
+
+void checkRbracket() {
+  if (symbol != SYM_RBRACKET)
+    syntaxErrorSymbol(SYM_RBRACKET);
+
+  getSymbol();
+}
+
+int isStructStar(int type) {
+  if (symbol == SYM_ASTERISK) {
+    type = STRUCTSTAR_T;
+    getSymbol();
+    if (symbol == SYM_IDENTIFIER) {
+      getSymbol();
+    }
+  }
+  return type;
 }
 
 void talloc() {
@@ -4117,8 +4148,13 @@ int gr_type() {
 
       getSymbol();
     }
-  } else
-    syntaxErrorSymbol(SYM_INT);
+  } else if (symbol == SYM_STRUCT) {
+    type = STRUCT_T;
+    getSymbol();
+  } else {
+    syntaxErrorMessage((int*) "could not find type ");
+    printSymbol(symbol);
+  }
 
   return type;
 }
@@ -4146,10 +4182,8 @@ int gr_selector() {
       else
         load_integer(*(constantVal + 1));
     }
-    if (symbol == SYM_RBRACKET)
-      getSymbol();
-    else
-      syntaxErrorSymbol(SYM_RBRACKET);
+
+    checkRbracket();
 
     // multiply by four
     emitLeftShiftBy(2);
@@ -4180,10 +4214,7 @@ int gr_selector() {
           load_integer(*(constantVal + 1));
       }
 
-      if (symbol == SYM_RBRACKET)
-        getSymbol();
-      else
-        syntaxErrorSymbol(SYM_RBRACKET);
+      checkRbracket();
 
       // multiply by four and add address
       emitLeftShiftBy(2);
@@ -4215,10 +4246,7 @@ int gr_selector() {
         load_integer(*(constantVal + 1));
     }
 
-    if (symbol == SYM_RBRACKET)
-      getSymbol();
-    else
-      syntaxErrorSymbol(SYM_RBRACKET);
+    checkRbracket();
 
     // multiply by four and add address
     emitLeftShiftBy(2);
@@ -4249,10 +4277,7 @@ int gr_selector() {
           load_integer(*(constantVal + 1));
       }
 
-      if (symbol == SYM_RBRACKET)
-        getSymbol();
-      else
-        syntaxErrorSymbol(SYM_RBRACKET);
+      checkRbracket();
 
       // multiply by four and add address
       emitLeftShiftBy(2);
@@ -4296,10 +4321,7 @@ void gr_variable(int offset) {
 
       getSymbol();
 
-      if (symbol != SYM_RBRACKET)
-        syntaxErrorSymbol(SYM_RBRACKET);
-
-      getSymbol();
+      checkRbracket();
 
       // 2dim arrays
       if (symbol == SYM_LBRACKET) {
@@ -4309,10 +4331,7 @@ void gr_variable(int offset) {
 
         getSymbol();
 
-        if (symbol != SYM_RBRACKET)
-          syntaxErrorSymbol(SYM_RBRACKET);
-
-        getSymbol();
+        checkRbracket();
 
         size1d = size1d * size2d;
       }
@@ -4544,9 +4563,12 @@ void gr_procedure(int* procedure, int returnType) {
 void gr_cstar() {
   int type;
   int* variableOrProcedureName;
+  int* entry;
+  int entryString;
   int size;
   int size1d;
   int size2d;
+  int fields;
 
   while (symbol != SYM_EOF) {
     while (lookForType()) {
@@ -4582,10 +4604,96 @@ void gr_cstar() {
         size2d = 1;
         getSymbol();
 
+        type = isStructStar(type);
+
         // type identifier "(" procedure declaration or definition
         if (symbol == SYM_LPARENTHESIS)
           gr_procedure(variableOrProcedureName, type);
-        else if (symbol == SYM_LBRACKET) {
+        else if (symbol == SYM_LBRACE) {
+          // struct identifier "{" ... "}"
+          if (type != STRUCT_T)
+            syntaxErrorSymbol(SYM_STRUCT);
+
+          fields = 0;
+
+          getSymbol();
+
+          createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, STRUCT, type, 0, binaryLength, 1, 1);
+
+          entry = getSymbolTableEntry(variableOrProcedureName, STRUCT);
+
+          while (lookForType() == 0) {
+
+            size = 1;
+            size1d = 1;
+            size2d = 1;
+
+            type = gr_type();
+
+            if (symbol == SYM_IDENTIFIER) {
+              getSymbol();
+
+              type = isStructStar(type);
+
+              if (symbol == SYM_LBRACKET) {
+                // type identifier "[" selector "]""
+                type = ARRAY_T;
+                getSymbol();
+                if (isLiteral())
+                  size1d = literal;
+                size = literal;
+                getSymbol();
+
+                checkRbracket();
+
+                // 2dim arrays
+                if (symbol == SYM_LBRACKET) {
+                  getSymbol();
+                  if (isLiteral())
+                    size2d = literal;
+
+                  getSymbol();
+
+                  checkRbracket();
+
+                  size = size1d * size2d;
+                }
+
+                fields = fields + (size1d - 1);
+
+              } else {
+                fields = fields + 1;
+              }
+              allocatedMemory = allocatedMemory + size * WORDSIZE;
+              createSymbolTableEntry(GLOBAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, -fields, size1d, size2d);
+
+            } else {
+
+              syntaxErrorSymbol(SYM_IDENTIFIER);
+
+              createSymbolTableEntry(GLOBAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, -fields, 1, 1);
+            }
+
+            if (symbol == SYM_SEMICOLON)
+              getSymbol();
+            else
+              syntaxErrorSymbol(SYM_SEMICOLON);
+          }
+
+          if (symbol == SYM_RBRACE)
+            getSymbol();
+          else
+            syntaxErrorSymbol(SYM_RBRACE);
+
+          setSize(entry, fields);
+
+
+          if (symbol != SYM_SEMICOLON)
+            syntaxErrorSymbol(SYM_SEMICOLON);
+
+          getSymbol();
+
+        } else if (symbol == SYM_LBRACKET) {
           // type identifier "[" literal "]" [ "[" literal "]" ]
           type = ARRAY_T;
           getSymbol();
@@ -4606,10 +4714,7 @@ void gr_cstar() {
 
                 getSymbol();
 
-                if (symbol == SYM_RBRACKET)
-                  getSymbol();
-                else
-                  syntaxErrorSymbol(SYM_RBRACKET);
+                checkRbracket();
 
                 size = size1d * size2d;
               }
@@ -4803,7 +4908,7 @@ void printSymbolsOccurrences() {
   int c;
   c = 0;
 
-  while (c < 32) {
+  while (c < 33) {
     print((int*) "Symbol: ");
     printSymbol(c);
     print((int*) " : ");
