@@ -8,7 +8,7 @@ This is the grammar of the C Star (C*) programming language.
 
 C* is a small Turing-complete subset of C that includes dereferencing (the * operator) but excludes data structures, bitwise and Boolean operators, and many other features. C* is supposed to be close to the minimum necessary for implementing a self-compiling, single-pass, recursive-descent compiler.
 
-Keywords: int, while, if, else, return, void
+Keywords: int, while, if, else, return, void, struct
 
 ```
 digit            = "0" | ... | "9" .
@@ -19,11 +19,15 @@ letter           = "a" | ... | "z" | "A" | ... | "Z" .
 
 identifier       = letter { letter | digit | "_" } .
 
-type             = "int" [ "*" ] .
+type             = ("struct" | "int") [ "*" ] .
 
 cast             = "(" type ")" .
 
-selector         = "[" expression <constantVal> "]" .
+dimensions       = "[" literal "]" [ "[" literal "]" ]
+
+selector         = "[" expression <constantVal> "]" [ "[" expression <constantVal> "]" ].
+
+record           = "struct" identifier "{" {gr_variable} "}"
 
 call             = identifier "(" [ expression <constantVal> { "," expression <constantVal> } ] ")" .
 
@@ -33,7 +37,7 @@ factor <constantVal>   = [ cast ]
                     ( [ "*" ] ( identifier | "(" expression <constantVal> ")" ) |
                       call |
                       literal |
-                      identifier selector |
+                      identifier [ selector ]|
                       """ { ascii_character } """ ) .
 
 term <constantVal>             = factor <constantVal> { ( "*" | "/" | "%" ) factor <constantVal> } .
@@ -57,7 +61,7 @@ if               = "if" "(" expression <constantVal> ")"
 
 return           = "return" [ expression <constantVal> ] .
 
-statement        = ( [ "*" ] identifier | "*" "(" expression <constantVal> ")" | identifier [selector] "=" //different from right side, TODO: adjust grammar
+statement        = ( [ "*" ] identifier [selector]| "*" "(" expression <constantVal> ")"  "="
                     expression <constantVal> ";" |
                     identifier "[" expression "]" ";" |
                     call ";" |
@@ -65,11 +69,11 @@ statement        = ( [ "*" ] identifier | "*" "(" expression <constantVal> ")" |
                     if |
                     return ";" .
 
-variable         = type identifier [ selector ] .
+variable         = type identifier [ dimensions ].
 
 procedure        = "(" [ variable { "," variable } ] ")"
                     ( ";" | "{" { variable ";" } { statement } "}" ) .
 
-cstar            = { type identifier [selector] [ "=" [ cast ] [ "-" ] literal ] ";" |
+cstar            = { type identifier [ dimensions ] [ "=" [ cast ] [ "-" ] literal ] ";" |
                    ( "void" | type ) identifier procedure } .
 ```

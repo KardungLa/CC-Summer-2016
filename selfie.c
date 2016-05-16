@@ -281,11 +281,12 @@ int SYM_SL           = 28; // <<
 int SYM_SR           = 29; // >>
 int SYM_LBRACKET     = 30; // [
 int SYM_RBRACKET     = 31; // ]
+int SYM_STRUCT       = 32; // STRUCT
+
+int SYMBOLS[33][2];
 
 int globalarray1dim[10];
 int globalarray2dim[10][2];
-
-int SYMBOLS[32][2]; 
 
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
 int maxIntegerLength    = 10; // maximum number of characters in an integer
@@ -350,11 +351,12 @@ void initScanner() {
   SYMBOLS[SYM_SR][0]           = (int) ">>";
   SYMBOLS[SYM_LBRACKET][0]     = (int) "[";
   SYMBOLS[SYM_RBRACKET][0]     = (int) "]";
+  SYMBOLS[SYM_STRUCT][0]       = (int) "struct";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
 
-  while (c < 32) {
+  while (c < 33) {
     SYMBOLS[c][1] = 0;
     c = c + 1;
   }
@@ -385,10 +387,10 @@ int reportUndefinedProcedures();
 // |  0 | next    | pointer to next entry
 // |  1 | string  | identifier string, string literal
 // |  2 | line#   | source line number
-// |  3 | class   | VARIABLE, PROCEDURE, STRING
-// |  4 | type    | INT_T, INTSTAR_T, VOID_T
+// |  3 | class   | VARIABLE, PROCEDURE, STRING, STRUCT
+// |  4 | type    | INT_T, INTSTAR_T, VOID_T, ARRAY_T, STRUCT_T, STRUCTSTAR_T
 // |  5 | value   | VARIABLE: initial value
-// |  6 | address | VARIABLE: offset, PROCEDURE: address, STRING: offset
+// |  6 | address | VARIABLE: offset, PROCEDURE: address, STRING: offset, STRUCT: offset
 // |  7 | scope   | REG_GP, REG_FP
 // |  8 | size    | size
 // |  9 | size2d  | size of 2nd dimension
@@ -461,12 +463,15 @@ void setSize2d(int* entry, int scope)        {
 int VARIABLE  = 1;
 int PROCEDURE = 2;
 int STRING    = 3;
+int STRUCT    = 4;
 
 // types
-int INT_T      = 1;
-int INTSTAR_T  = 2;
-int VOID_T     = 3;
-int INTARRAY_T = 4;
+int INT_T        = 1;
+int INTSTAR_T    = 2;
+int VOID_T       = 3;
+int ARRAY_T   = 4;
+int STRUCT_T     = 5;
+int STRUCTSTAR_T = 6;
 
 // symbol tables
 int GLOBAL_TABLE  = 1;
@@ -1798,6 +1803,8 @@ int identifierOrKeyword() {
     return SYM_RETURN;
   if (identifierStringMatch(SYM_VOID))
     return SYM_VOID;
+  if (identifierStringMatch(SYM_STRUCT))
+    return SYM_STRUCT;
   else
     return SYM_IDENTIFIER;
 }
@@ -2293,6 +2300,8 @@ int lookForType() {
   if (symbol == SYM_INT)
     return 0;
   else if (symbol == SYM_VOID)
+    return 0;
+  else if (symbol == SYM_STRUCT)
     return 0;
   else if (symbol == SYM_EOF)
     return 0;
@@ -2804,7 +2813,7 @@ int gr_factor(int* constantVal) {
       // selector: identifier "[" expression "]"
       type = gr_selector();
 
-      if (type == INTARRAY_T)
+      if (type == ARRAY_T)
         type = INT_T;
 
       // dereference
@@ -2812,7 +2821,7 @@ int gr_factor(int* constantVal) {
     } else {
       // variable access: identifier
       entry = getVariable(variableOrProcedureName);
-      if (getType(entry) == INTARRAY_T) {
+      if (getType(entry) == ARRAY_T) {
         talloc();
         emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), getAddress(entry));
         emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), FCT_ADDU);
@@ -4280,7 +4289,7 @@ void gr_variable(int offset) {
     getSymbol();
     if (symbol == SYM_LBRACKET) {
       // type identifier "[" selector "]""
-      type = INTARRAY_T;
+      type = ARRAY_T;
       getSymbol();
       if (isLiteral())
         size1d = literal;
@@ -4539,10 +4548,6 @@ void gr_cstar() {
   int size1d;
   int size2d;
 
-  size = 1;
-  size1d = 1;
-  size2d = 1;
-
   while (symbol != SYM_EOF) {
     while (lookForType()) {
       syntaxErrorUnexpected();
@@ -4572,7 +4577,9 @@ void gr_cstar() {
 
       if (symbol == SYM_IDENTIFIER) {
         variableOrProcedureName = identifier;
-
+        size = 1;
+        size1d = 1;
+        size2d = 1;
         getSymbol();
 
         // type identifier "(" procedure declaration or definition
@@ -4580,7 +4587,7 @@ void gr_cstar() {
           gr_procedure(variableOrProcedureName, type);
         else if (symbol == SYM_LBRACKET) {
           // type identifier "[" literal "]" [ "[" literal "]" ]
-          type = INTARRAY_T;
+          type = ARRAY_T;
           getSymbol();
           if (isLiteral()) {
             size1d = literal;
