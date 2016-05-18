@@ -297,6 +297,18 @@ struct globalstruct {
   struct globalstruct* next;
 };
 
+struct stEntry {
+  struct stEntry* next;
+  int* string;
+  int line;
+  int class;
+  int type;
+  int value;
+  int address;
+  int size;
+  int size2d;
+};
+
 struct globalstruct* next;
 
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
@@ -522,6 +534,7 @@ int isStructStar(int type);
 int lookForFactor();
 int lookForStatement();
 int lookForType();
+int lookForVariableType();
 
 void save_temporaries();
 void restore_temporaries(int numberOfTemporaries);
@@ -2137,6 +2150,13 @@ int* getSymbolTableEntry(int* string, int class) {
 
     if (entry != (int*) 0)
       return entry;
+
+  } else if (class == STRUCT) {
+    entry = searchSymbolTable(local_symbol_table, string, class);
+
+    if (entry != (int*) 0)
+      return entry;
+
   }
 
   return searchSymbolTable(global_symbol_table, string, class);
@@ -2320,6 +2340,15 @@ int lookForType() {
     return 0;
   else
     return 1;
+}
+
+int lookForVariableType() {
+  if (symbol == SYM_INT)
+    return 1;
+  else if (symbol == SYM_STRUCT)
+    return 1;
+  else
+    return 0;
 }
 
 void checkRbracket() {
@@ -2853,6 +2882,10 @@ int gr_factor(int* constantVal) {
       // variable access: identifier
       entry = getVariable(variableOrProcedureName);
       if (getType(entry) == ARRAY_T) {
+        talloc();
+        emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), getAddress(entry));
+        emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), FCT_ADDU);
+      } else if (getType(entry) == STRUCT_T) {
         talloc();
         emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), getAddress(entry));
         emitRFormat(OP_SPECIAL, getScope(entry), currentTemporary(), currentTemporary(), FCT_ADDU);
@@ -4302,17 +4335,115 @@ int gr_selector() {
 void gr_variable(int offset) {
   int type;
   int type2d;
+  int fields;
+  int size;
   int size1d;
   int size2d;
+  int* currentIdentifier;
+  int* entry;
 
+  size = 1;
   size1d = 1;
   size2d = 1;
 
   type = gr_type();
 
   if (symbol == SYM_IDENTIFIER) {
+    currentIdentifier = identifier;
     getSymbol();
-    if (symbol == SYM_LBRACKET) {
+
+    size = 1;
+    size1d = 1;
+    size2d = 1;
+
+    type = isStructStar(type);
+
+    if (symbol == SYM_LBRACE) {
+
+      if (type != STRUCT_T)
+        syntaxErrorSymbol(SYM_STRUCT);
+
+      // struct identifier "{" ... "}"
+      if (type != STRUCT_T)
+        syntaxErrorSymbol(SYM_STRUCT);
+
+      fields = 0;
+
+      getSymbol();
+
+      createSymbolTableEntry(LOCAL_TABLE, currentIdentifier, lineNumber, STRUCT, type, 0, offset, 1, 1);
+
+      entry = local_symbol_table;
+
+      while (lookForVariableType()) {
+
+        size = 1;
+        size1d = 1;
+        size2d = 1;
+
+        type = gr_type();
+
+        if (symbol == SYM_IDENTIFIER) {
+          getSymbol();
+
+          type = isStructStar(type);
+
+          if (symbol == SYM_LBRACKET) {
+            // type identifier "[" selector "]""
+            type = ARRAY_T;
+            getSymbol();
+            if (isLiteral())
+              size1d = literal;
+            size = literal;
+            getSymbol();
+
+            checkRbracket();
+
+            // 2dim arrays
+            if (symbol == SYM_LBRACKET) {
+              getSymbol();
+              if (isLiteral())
+                size2d = literal;
+
+              getSymbol();
+
+              checkRbracket();
+
+              size = size1d * size2d;
+            }
+
+            fields = fields + (size1d - 1);
+
+          } else {
+            fields = fields + 1;
+          }
+          //allocatedMemory = allocatedMemory + size * WORDSIZE;
+          createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, -fields, size1d, size2d);
+
+        } else {
+
+          syntaxErrorSymbol(SYM_IDENTIFIER);
+
+          createSymbolTableEntry(LOCAL_TABLE, (int*) "missing variable name", lineNumber, VARIABLE, type, 0, -fields, 1, 1);
+        }
+
+        if (symbol == SYM_SEMICOLON)
+          getSymbol();
+        else
+          syntaxErrorSymbol(SYM_SEMICOLON);
+      }
+
+      print((int*) "nameofstruct: ");
+      print((int*)getString(entry));
+      println();
+      if (symbol == SYM_RBRACE)
+        getSymbol();
+      else
+        syntaxErrorSymbol(SYM_RBRACE);
+
+      setSize(entry, fields);
+
+    } else if (symbol == SYM_LBRACKET) {
       // type identifier "[" selector "]""
       type = ARRAY_T;
       getSymbol();
@@ -4517,7 +4648,7 @@ void gr_procedure(int* procedure, int returnType) {
 
     localVariables = 0;
 
-    while (symbol == SYM_INT) {
+    while (lookForVariableType()) {
       localVariables = localVariables + 1;
 
       gr_variable(-localVariables * WORDSIZE);
@@ -4622,7 +4753,7 @@ void gr_cstar() {
 
           entry = getSymbolTableEntry(variableOrProcedureName, STRUCT);
 
-          while (lookForType() == 0) {
+          while (lookForVariableType()) {
 
             size = 1;
             size1d = 1;
@@ -4664,7 +4795,8 @@ void gr_cstar() {
               } else {
                 fields = fields + 1;
               }
-              allocatedMemory = allocatedMemory + size * WORDSIZE;
+              if (type != STRUCT_T)
+                allocatedMemory = allocatedMemory + size * WORDSIZE;
               createSymbolTableEntry(GLOBAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, -fields, size1d, size2d);
 
             } else {
@@ -7882,7 +8014,7 @@ void array1dimtest(int i, int arr1[10]) {
   arr1[i] = 43;
 }
 
-void array2dimtest(int i, int arr1[10][10]) {
+void array2dimtest(int i, int arr1[10][10], struct globalstruct* r_t) {
   // gr_statement
   arr1[0][0] = 43;
   arr1[0][i] = 43;
@@ -7893,6 +8025,20 @@ void array2dimtest(int i, int arr1[10][10]) {
 int main(int argc, int* argv) {
   // array index
   int i;
+
+  struct localstruct{
+    int a;
+    int b;
+    int* aa;
+    int array1[10];
+    int array2[10][2];
+  };
+
+  struct localstruct2{
+    int x;
+    int y;
+    int a;
+  };
 
   int array1dim[10];
   int array2dim[10][10];
@@ -8018,7 +8164,7 @@ int main(int argc, int* argv) {
   println();
 
   // test with function call
-  array2dimtest(i, array2dim);
+  //array2dimtest(i, array2dim, globalstruct);
 
   // gr_statement with use of gr_factor
   array2dim[2][0] = array2dim[0][0] + array2dim[0][0];

@@ -27,7 +27,7 @@ dimensions       = "[" literal "]" [ "[" literal "]" ]
 
 selector         = "[" expression <constantVal> "]" [ "[" expression <constantVal> "]" ].
 
-record           = "struct" identifier "{" {gr_variable} "}"
+record           = "struct" identifier "{" {variable} "}"
 
 call             = identifier "(" [ expression <constantVal> { "," expression <constantVal> } ] ")" .
 
