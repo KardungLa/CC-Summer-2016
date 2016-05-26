@@ -303,16 +303,19 @@ struct globalstruct {
   struct globalstruct* next;
 };
 
-struct stEntry {
-  struct stEntry* next;
+struct symTableEntry {
+  struct symTableEntry* next;
   int* string;
   int line;
   int class;
   int type;
   int value;
   int address;
+  int scope;
   int size;
   int size2d;
+  int* refType;
+  int* nextField;
 };
 
 struct globalstruct* next;
@@ -407,7 +410,7 @@ void resetSymbolTables();
 
 void createSymbolTableEntry(int which, int* string, int line, int class, int type, int value, int address, int size, int size2d);
 
-void createStructTableEntry(int entry, int* string, int line, int class, int type, int value, int address, int size, int size2d);
+void createStructTableEntry(int* entry, int* string, int line, int class, int type, int value, int address, int size, int size2d);
 
 int* searchSymbolTable(int* entry, int* string, int class);
 int* searchStructTable(int* entry, int* string, int class);
@@ -417,9 +420,8 @@ int* getSymbolTableEntry(int* string, int class);
 int isUndefinedProcedure(int* entry);
 int reportUndefinedProcedures();
 
-int sizeOfEntry(int* variable);
-
 // symbol table entry:
+// scheme
 // +----+-----------+
 // |  0 | next      | pointer to next entry
 // |  1 | string    | identifier string, string literal
@@ -592,22 +594,12 @@ void gr_if();
 void gr_return(int returnType);
 void gr_statement();
 int  gr_type();
-int  gr_selector();
+int  gr_selector(int* member);
 int  gr_struct();
 void gr_variable(int offset);
 void gr_initialization(int* name, int offset, int type);
 void gr_procedure(int* procedure, int returnType);
 void gr_cstar();
-
-// todo
-int sizeOfEntry(int* variable) {
-  int* entry;
-
-  if (entry == ((int*) 0))
-    syntaxErrorMessage((int*) "size of entry failed");
-
-  return getSize(entry);
-}
 
 // ------------------------ GLOBAL VARIABLES -----------------------
 
@@ -2175,11 +2167,12 @@ void createSymbolTableEntry(int whichTable, int* string, int line, int class, in
   }
 }
 
-void createStructTableEntry(int entry, int* string, int line, int class, int type, int value, int address, int size, int size2d) {
+void createStructTableEntry(int* entry, int* string, int line, int class, int type, int value, int address, int size, int size2d) {
   int* newEntry;
+  int* oldHead;
 
   newEntry = malloc(4 * SIZEOFINTSTAR + 8 * SIZEOFINT);
-
+  oldHead = getNextField(entry);
   setString(newEntry, string);
   setLineNumber(newEntry, line);
   setClass(newEntry, class);
@@ -2189,19 +2182,23 @@ void createStructTableEntry(int entry, int* string, int line, int class, int typ
   setSize(newEntry, size);
   setSize2d(newEntry, size2d);
   setRefType(newEntry, (int*) 0);
+  setNextField(newEntry, oldHead);
   setNextField(entry, newEntry);
 }
 
 int* searchStructTable(int* entry, int* string, int class) {
   while (entry != (int*) 0) {
     if (stringCompare(string, getString(entry)))
-      if (class == getClass(entry))
+      if (class == getClass(entry)){
         return entry;
+      }
 
     // keep looking
     entry = getNextField(entry);
   }
 
+  print((int*)"No entry found.");
+  println();
   return (int*) 0;
 }
 
@@ -2852,6 +2849,22 @@ int gr_factor(int* constantVal) {
         syntaxErrorSymbol(SYM_RPARENTHESIS);
 
       // not a cast: "(" expression ")"
+    } else if (symbol == SYM_STRUCT) {
+      hasCast = 1;
+
+      cast = gr_type();
+      if (symbol == SYM_IDENTIFIER)
+        getSymbol();
+      if (symbol == SYM_ASTERISK) {
+        cast = STRUCTSTAR_T;
+        getSymbol();
+      }
+      if (symbol == SYM_RPARENTHESIS)
+        getSymbol();
+      else
+        syntaxErrorSymbol(SYM_RPARENTHESIS);
+
+      // not a cast: "(" expression ")"
     } else {
       type = gr_expression(constantVal);
 
@@ -2942,7 +2955,7 @@ int gr_factor(int* constantVal) {
       emitIFormat(OP_ADDIU, REG_ZR, REG_V0, 0);
     } else if (symbol == SYM_LBRACKET) {
       // selector: identifier "[" expression "]"
-      type = gr_selector();
+      type = gr_selector((int*) 0);
 
       if (type == ARRAY_T)
         type = INT_T;
@@ -4158,7 +4171,7 @@ void gr_statement() {
       // identifier = expression
     } else if (symbol == SYM_LBRACKET) {
 
-      ltype = gr_selector();
+      ltype = gr_selector((int*)0);
 
       if (symbol == SYM_ASSIGN) {
         getSymbol();
@@ -4222,8 +4235,6 @@ void gr_statement() {
 
     } else if (symbol == SYM_RARROW) {
       ltype = gr_struct();
-
-      getSymbol();
 
       if (symbol == SYM_ASSIGN)
         getSymbol();
@@ -4300,14 +4311,13 @@ int gr_type() {
   return type;
 }
 
-int gr_selector() {
+int gr_selector(int* member) {
   int* entry;
   int type;
   int type2d;
   int* constantVal;
 
   constantVal = malloc(2 * SIZEOFINT);
-
   entry = getVariable(identifier);
 
   if (getAddress(entry) > 0) {
@@ -4440,17 +4450,26 @@ int gr_selector() {
 
 }
 
-// todo
 int gr_struct() {
   int  type;
+  int* entry;
+  int* member;
 
+  //load address of struct
   type = load_variable(identifier);
+  entry = getVariable(identifier);
 
+  //find reference type of that struct
+  entry = getRefType(entry);
   getSymbol();
 
-  load_integer(1);
+  member = searchSymbolTable(global_symbol_table, entry, VARIABLE);
+  entry = searchStructTable(member, identifier, VARIABLE);
 
-  emitLeftShiftBy(2);
+  //load offset of member
+  load_integer(getAddress(entry) * (-1));
+  emitRFormat(OP_SPECIAL, REG_ZR, currentTemporary(), currentTemporary(), FCT_SUBU);
+
   emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_ADDU);
   tfree(1);
 
@@ -4466,6 +4485,7 @@ void gr_variable(int offset) {
   int size1d;
   int size2d;
   int* previousIdentifier;
+  int* reftype;
   int* entry;
   int* entryString;
 
@@ -4512,9 +4532,9 @@ void gr_variable(int offset) {
     }
 
     if (type == STRUCTSTAR_T) {
-      type = INTSTAR_T;
       createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, size1d, size2d);
-      setRefType(searchSymbolTable(local_symbol_table, identifier, VARIABLE), searchSymbolTable(local_symbol_table, previousIdentifier, VARIABLE));
+      reftype = searchSymbolTable(global_symbol_table, previousIdentifier, VARIABLE);
+      setRefType(local_symbol_table, getString(reftype));
     } else {
       createSymbolTableEntry(LOCAL_TABLE, identifier, lineNumber, VARIABLE, type, 0, offset, size1d, size2d);
     }
@@ -4843,13 +4863,13 @@ void gr_cstar() {
 
 
               if (type == STRUCTSTAR_T) {
-                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields, size1d, size2d);
+                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields * WORDSIZE, size1d, size2d);
                 setRefType(searchStructTable(entry, identifier, VARIABLE), getSymbolTableEntry(entryString, VARIABLE));
               } else if (type == STRUCT_T) {
-                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields, size1d, size2d);
+                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields * WORDSIZE, size1d, size2d);
                 setRefType(searchStructTable(entry, identifier, VARIABLE), getSymbolTableEntry(entryString, VARIABLE));
               } else {
-                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields, size2d, size2d);
+                createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields * WORDSIZE, size2d, size2d);
               }
 
             } else {
@@ -5115,6 +5135,7 @@ void printSymbolsOccurrences() {
 
 void printSymbolTable() {
   int* entry;
+  int* field;
 
   entry = global_symbol_table;
 
@@ -5124,16 +5145,27 @@ void printSymbolTable() {
     if (getClass(entry) == VARIABLE) {
       print((int*) getString(entry));
       print((int*) ": ");
-      print(itoa(getAddress(entry), string_buffer, 10, 0, 0));
-      print((int*) ": ");
-      print(itoa(getScope(entry), string_buffer, 10, 0, 0));
-      print((int*) ": ");
-      print(itoa(getSize(entry), string_buffer, 10, 0, 0));
+      // print(itoa(getAddress(entry), string_buffer, 10, 0, 0));
+      // print((int*) ": ");
+      // print(itoa(getScope(entry), string_buffer, 10, 0, 0));
+      // print((int*) ": ");
+      // print(itoa(getSize(entry), string_buffer, 10, 0, 0));
       print((int*) ": RefType: ");
-      print(itoa(getRefType(entry), string_buffer, 10, 0, 0));
-      print((int*) ": ");
-      print(itoa(getNextField(entry), string_buffer, 10, 0, 0));
+      //print(itoa(getRefType(entry), string_buffer, 10, 0, 0));
+      print((int*)getRefType(entry));
+      // print((int*) ": ");
+      // print(itoa(getNextField(entry), string_buffer, 10, 0, 0));
       println();
+      if ( getNextField(entry) != (int*) 0){
+        field = getNextField(entry);
+        print((int*) "Printing Members: ");
+        println();
+        while(field != (int*) 0){
+          print((int*) getString(field));
+          println();
+          field = getNextField(field);
+        }
+      }
     }
 
     entry = getNextEntry(entry);
@@ -8114,12 +8146,17 @@ void array2dimtest(int i, int arr1[10][10]) {
   arr1[i][0] = 43;
 }
 
+void structTest(struct symTableEntry* entry){
+  entry->string = (int*) "method called";
+}
+
 int main(int argc, int* argv) {
   // array index
   int i;
   int s;
 
-  struct globalstruct1* teststruct;
+  struct globalstruct* teststruct;
+  struct symTableEntry* st;
 
   int array1dim[10];
   int array2dim[10][10];
@@ -8144,226 +8181,20 @@ int main(int argc, int* argv) {
   print((int*) "Test case for structs");
   println();
 
-  //teststruct = malloc(sizeOfEntry((int*) "globalarray1dim"));
-
-  teststruct = malloc(8);
+  teststruct = (struct globalstruct*) malloc(34*SIZEOFINT);
+  st = (struct symTableEntry*) malloc(4 * SIZEOFINTSTAR + 8 * SIZEOFINT);
+  
   teststruct->a = 1;
   teststruct->b = 42;
+  st->string = (int*) "initial value";
 
-  print((int*) " teststruct->a = 1: ");
-  print(itoa(teststruct->a, string_buffer, 10, 0, 0));
+  print((int*) " before method call : ");
+  print((int*)st->string);
   println();
 
-  print((int*) " teststruct->b = 42: ");
-  print(itoa(teststruct->b, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Test cases for 1 dimensional arrays: ");
-  println();
-
-  print((int*) " s = 1: ");
-  print(itoa(s, string_buffer, 10, 0, 0));
-  println();
-
-  i = 1;
-  s = 1;
-
-  array1dim[0] = 42;
-  array1dim[i] = 42;
-
-  // gr_statement with use of gr_factor
-  array1dim[2] = array1dim[0] + array1dim[i];
-
-  print((int*) " i = 1: ");
-  print(itoa(i, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array1dim[0] = 42: ");
-  print(itoa(array1dim[0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array1dim[i] = 42: ");
-  print(itoa(array1dim[i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array1dim[2] = 84: ");
-  print(itoa(array1dim[2], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Test cases for 1 dimensional arrays with function call: ");
-  println();
-
-  // test with function call
-  array1dimtest(i, array1dim);
-
-  // gr_statement with use of gr_factor
-  array1dim[2] = array1dim[0] + array1dim[i];
-
-  print((int*) " i = 1: ");
-  print(itoa(i, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array1dim[0] = 43: ");
-  print(itoa(array1dim[0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array1dim[i] = 43: ");
-  print(itoa(array1dim[i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Test cases for 2 dimensional arrays: ");
-  println();
-
-  array2dim[0][0] = 42;
-  array2dim[0][i] = 42;
-  array2dim[i][i] = 42;
-  array2dim[i][0] = 42;
-
-  // gr_statement with use of gr_factor
-  array2dim[2][0] = array2dim[0][0] + array2dim[0][0];
-  array2dim[3][i] = array2dim[0][i] + array2dim[0][i];
-  array2dim[4][0] = array2dim[i][i] + array2dim[i][i];
-  array2dim[5][i] = array2dim[i][0] + array2dim[i][0];
-
-  print((int*) " i = 1: ");
-  print(itoa(i, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[0][0] = 42: ");
-  print(itoa(array2dim[0][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[0][i] = 42: ");
-  print(itoa(array2dim[0][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[i][i] = 42: ");
-  print(itoa(array2dim[i][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[i][0] = 42: ");
-  print(itoa(array2dim[i][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[2][0] = 84: ");
-  print(itoa(array2dim[2][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[3][i] = 84: ");
-  print(itoa(array2dim[3][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[4][0] = 84: ");
-  print(itoa(array2dim[4][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[5][i] = 84: ");
-  print(itoa(array2dim[5][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Test cases for 2 dimensional arrays with function call: ");
-  println();
-
-  // test with function call
-  //array2dimtest(i, array2dim, globalstruct);
-
-  // gr_statement with use of gr_factor
-  array2dim[2][0] = array2dim[0][0] + array2dim[0][0];
-  array2dim[3][i] = array2dim[0][i] + array2dim[0][i];
-  array2dim[4][0] = array2dim[i][i] + array2dim[i][i];
-  array2dim[5][i] = array2dim[i][0] + array2dim[i][0];
-
-  print((int*) " i = 1: ");
-  print(itoa(i, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[0][0] = 43: ");
-  print(itoa(array2dim[0][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[0][i] = 43: ");
-  print(itoa(array2dim[0][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[i][i] = 43: ");
-  print(itoa(array2dim[i][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[i][0] = 43: ");
-  print(itoa(array2dim[i][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[2][0] = 86: ");
-  print(itoa(array2dim[2][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[3][i] = 86: ");
-  print(itoa(array2dim[3][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[4][0] = 86: ");
-  print(itoa(array2dim[4][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " array2dim[5][i] = 86: ");
-  print(itoa(array2dim[5][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) "Test cases for global arrays: ");
-  println();
-
-  // test with function call
-  globalarraystest(i);
-
-  globalarray2dim[2][0] = globalarray2dim[0][0] + globalarray2dim[0][0];
-  globalarray2dim[3][i] = globalarray2dim[0][i] + globalarray2dim[0][i];
-  globalarray2dim[4][0] = globalarray2dim[i][i] + globalarray2dim[i][i];
-  globalarray2dim[5][i] = globalarray2dim[i][0] + globalarray2dim[i][0];
-
-  globalarray1dim[2] = globalarray1dim[0] + globalarray1dim[i];
-
-  print((int*) " i = 1: ");
-  print(itoa(i, string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray1dim[0] = 43: ");
-  print(itoa(globalarray1dim[0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray1dim[i] = 43: ");
-  print(itoa(globalarray1dim[i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[0][0] = 43: ");
-  print(itoa(globalarray2dim[0][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[0][i] = 43: ");
-  print(itoa(globalarray2dim[0][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[i][i] = 43: ");
-  print(itoa(globalarray2dim[i][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[i][0] = 43: ");
-  print(itoa(globalarray2dim[i][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[2][0] = 86: ");
-  print(itoa(globalarray2dim[2][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[3][i] = 86: ");
-  print(itoa(globalarray2dim[3][i], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[4][0] = 86: ");
-  print(itoa(globalarray2dim[4][0], string_buffer, 10, 0, 0));
-  println();
-
-  print((int*) " globalarray2dim[5][i] = 86: ");
-  print(itoa(globalarray2dim[5][i], string_buffer, 10, 0, 0));
+  structTest(st);
+  print((int*) " after method call : ");
+  print((int*)st->string);
   println();
 
   if (selfie(argc, (int*) argv) != 0) {
