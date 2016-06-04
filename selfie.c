@@ -142,6 +142,8 @@ int CHAR_EXCLAMATION  = '!';
 int CHAR_PERCENTAGE   = '%';
 int CHAR_SINGLEQUOTE  = 39; // ASCII code 39 = '
 int CHAR_DOUBLEQUOTE  = '"';
+int CHAR_AMPERSAND    = '&';
+int CHAR_VBAR         = '|';
 
 int SIZEOFINT     = 4; // must be the same as WORDSIZE
 int SIZEOFINTSTAR = 4; // must be the same as WORDSIZE
@@ -283,8 +285,11 @@ int SYM_LBRACKET     = 30; // [
 int SYM_RBRACKET     = 31; // ]
 int SYM_STRUCT       = 32; // STRUCT
 int SYM_RARROW       = 33; // ->
+int SYM_NOT          = 34; // !
+int SYM_OR           = 35; // ||
+int SYM_AND          = 36; // &&
 
-int SYMBOLS[34][2];
+int SYMBOLS[37][2];
 
 int globalarray1dim[10];
 int globalarray2dim[10][2];
@@ -385,11 +390,14 @@ void initScanner() {
   SYMBOLS[SYM_RBRACKET][0]     = (int) "]";
   SYMBOLS[SYM_STRUCT][0]       = (int) "struct";
   SYMBOLS[SYM_RARROW][0]       = (int) "->";
+  SYMBOLS[SYM_NOT][0]          = (int) "!";
+  SYMBOLS[SYM_OR][0]           = (int) "||";
+  SYMBOLS[SYM_AND][0]          = (int) "&&";
 
   character = CHAR_EOF;
   symbol    = SYM_EOF;
 
-  while (c < 34) {
+  while (c < 37) {
     SYMBOLS[c][1] = 0;
     c = c + 1;
   }
@@ -2093,13 +2101,12 @@ int getSymbol() {
   } else if (character == CHAR_EXCLAMATION) {
     getCharacter();
 
-    if (character == CHAR_EQUAL)
+    symbol = SYM_NOT;
+    if (character == CHAR_EQUAL){
       getCharacter();
-    else
-      syntaxErrorCharacter(CHAR_EQUAL);
 
-    symbol = SYM_NOTEQ;
-
+      symbol = SYM_NOTEQ;
+    }
   } else if (character == CHAR_PERCENTAGE) {
     getCharacter();
 
@@ -2114,6 +2121,14 @@ int getSymbol() {
 
     symbol = SYM_RBRACKET;
 
+  } else if (character == CHAR_AMPERSAND) {
+    getCharacter();
+
+    symbol = SYM_AND;
+  } else if (character == CHAR_VBAR) {
+    getCharacter();
+
+    symbol = SYM_OR;
   } else {
     printLineNumber((int*) "error", lineNumber);
     print((int*) "found unknown character ");
@@ -5121,7 +5136,7 @@ void printSymbolsOccurrences() {
   int c;
   c = 0;
 
-  while (c < 34) {
+  while (c < 37) {
     print((int*) "Symbol: ");
     printSymbol(c);
     print((int*) " : ");
@@ -8183,7 +8198,7 @@ int main(int argc, int* argv) {
 
   teststruct = (struct globalstruct*) malloc(34*SIZEOFINT);
   st = (struct symTableEntry*) malloc(4 * SIZEOFINTSTAR + 8 * SIZEOFINT);
-  
+
   teststruct->a = 1;
   teststruct->b = 42;
   st->string = (int*) "initial value";
