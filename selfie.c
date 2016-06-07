@@ -2835,14 +2835,22 @@ int gr_factor(int* constantVal) {
   int cast;
   int type;
   int* entry;
+  int negation;
+  int negationTemp;
 
   int* variableOrProcedureName;
 
   // assert: n = allocatedTemporaries
 
   hasCast = 0;
+  negation = 0;
 
   type = INT_T;
+  // "!"
+  if (symbol == SYM_NOT){
+    negation = 1;
+    getSymbol();
+  }
 
   while (lookForFactor()) {
     syntaxErrorUnexpected();
@@ -2867,7 +2875,7 @@ int gr_factor(int* constantVal) {
         getSymbol();
       else
         syntaxErrorSymbol(SYM_RPARENTHESIS);
-
+        // if(!x && !(xx && aa))
       // not a cast: "(" expression ")"
     } else if (symbol == SYM_STRUCT) {
       hasCast = 1;
@@ -2895,6 +2903,15 @@ int gr_factor(int* constantVal) {
         } else {
           load_integer(*(constantVal + 1));
         }
+      }
+
+      if (negation) {
+        if(*(constantVal + 2) != 0) {
+          negationTemp = *(constantVal + 3);
+          *(constantVal + 3) = *(constantVal + 2);
+          *(constantVal + 2) = negationTemp;
+        }
+        negation = 0;
       }
 
       *(constantVal) = 0;
@@ -3003,7 +3020,15 @@ int gr_factor(int* constantVal) {
   } else if (symbol == SYM_INTEGER) {
     //pass value up to gr_term for constant folding
     *(constantVal) = 1;
-    *(constantVal + 1) = literal;
+
+    if (negation){
+      negation = 0;
+      if (literal == 0)
+        *(constantVal + 1) = 1;
+      else
+        *(constantVal + 1) = 0;
+    } else
+      *(constantVal + 1) = literal;
 
     getSymbol();
 
@@ -3053,6 +3078,11 @@ int gr_factor(int* constantVal) {
     syntaxErrorUnexpected();
 
   // assert: allocatedTemporaries == n + 1
+  if (negation) {
+    load_integer(1);
+    emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
+    tfree(1);
+  }
 
   if (hasCast)
     return cast;
@@ -8368,8 +8398,13 @@ int main(int argc, int* argv) {
   print((int*) "Test case for AND");
   println();
 
-  if (0 && 1) {
-    print((int*) "error 0 && 1");
+  if (!(0 && 1)) {
+    print((int*) "!(0 && 1) = true");
+    println();
+  }
+
+  if (!0 && 1) {
+    print((int*) "!0 && 1 = true");
     println();
   }
 
@@ -8379,7 +8414,7 @@ int main(int argc, int* argv) {
   }
 
   if (1 && 1) {
-    print((int*) "it's so true");
+    print((int*) "1 && 1 = true");
     println();
   }
 
@@ -8389,7 +8424,7 @@ int main(int argc, int* argv) {
   }
 
   if (1 && 1 && 1) {
-    print((int*) "it's so true");
+    print((int*) "1 && 1 && 1 = true");
     println();
   }
 
@@ -8408,6 +8443,11 @@ int main(int argc, int* argv) {
 
   if (0 || 1) {
     print((int*) "0 || 1 = true");
+    println();
+  }
+
+  if (0 || !1) {
+    print((int*) "error 0 || !1");
     println();
   }
 

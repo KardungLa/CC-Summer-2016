@@ -33,7 +33,7 @@ call             = identifier "(" [ expression <constantVal> { "," expression <c
 
 literal          = integer | "'" ascii_character "'" .
 
-factor <constantVal>   = [ cast ]
+factor <constantVal>   = ["!"][ cast ]
                     ( [ "*" ] ( identifier | "(" expression <constantVal> ")" ) |
                       call |
                       literal |
@@ -46,7 +46,11 @@ simpleExpression <constantVal> = [ "-" ] term <constantVal> { ( "+" | "-" ) term
 
 shiftExpression <constantVal>  = simpleExpression <constantVal> { ("<<" | ">>") simpleExpression <constantVal> } .
 
-expression <constantVal>       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
+compareExpression <constantVal>       = shiftExpression <constantVal> [ ( "==" | "!=" | "<" | ">" | "<=" | ">=" ) shiftExpression <constantVal> ] .
+
+andExpression <constantVal>       = compareExpression <constantVal> [ ( "&&" ) compareExpression <constantVal> ] .
+
+expression <constantVal>       = andExpression <constantVal> [ ( "||" ) andExpression <constantVal> ] .
 
 while            = "while" "(" expression <constantVal> ")"
                              ( statement |
