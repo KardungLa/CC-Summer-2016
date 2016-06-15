@@ -1810,18 +1810,22 @@ int findNextCharacter() {
 }
 
 int isCharacterLetter() {
-  if (character >= 'a')
-    if (character <= 'z')
-      return 1;
-    else
-      return 0;
-  else if (character >= 'A')
-    if (character <= 'Z')
-      return 1;
-    else
-      return 0;
-  else
+  if (character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'){
+    return 1;
+  } else
     return 0;
+  // if (character >= 'a')
+  //   if (character <= 'z')
+  //     return 1;
+  //   else
+  //     return 0;
+  // else if (character >= 'A')
+  //   if (character <= 'Z')
+  //     return 1;
+  //   else
+  //     return 0;
+  // else
+  //   return 0;
 }
 
 int isCharacterDigit() {
@@ -3851,7 +3855,7 @@ int gr_andExpression(int* constantVal) {
   int rtype;
   int prevType;
   int* head;
-  int* fjump;
+  int* thead;
 
   prevType = 0;
 
@@ -3879,6 +3883,18 @@ int gr_andExpression(int* constantVal) {
 
   while (symbol == SYM_AND) {
     getSymbol();
+
+    //fixup of previously seen ||s
+    if (*(constantVal + 3) != 0) {
+      thead = (int*) * (constantVal + 3);
+      while (*(thead + 1) != 0) {
+        fixup_relative(*thead);
+        thead = (int*) * (thead + 1);
+        //tfree(1);
+      }
+      fixup_relative(*thead);
+    }
+
     rtype = gr_compareExpression(constantVal);
 
     if (*(constantVal) == 1) {
@@ -3912,6 +3928,7 @@ int gr_expression(int* constantVal) {
   int rtype;
   int prevType;
   int* head;
+  int* fhead;
   int* fjump;
 
   prevType = 0;
@@ -3940,6 +3957,18 @@ int gr_expression(int* constantVal) {
 
   while (symbol == SYM_OR) {
     getSymbol();
+
+    //fixup of previously seen &&s
+    if (*(constantVal + 2) != 0) {
+      fhead = (int*) * (constantVal + 2);
+      while (*(fhead + 1) != 0) {
+        fixup_relative(*fhead);
+        fhead = (int*) * (fhead + 1);
+        //tfree(1);
+      }
+      fixup_relative(*fhead);
+    }
+
     rtype = gr_andExpression(constantVal);
 
     if (*(constantVal) == 1) {
@@ -8471,6 +8500,42 @@ int main(int argc, int* argv) {
 
   if (1 || 1 || 1) {
     print((int*) "1 || 1 || 1 = true");
+    println();
+  }
+
+  print((int*) "Combining OR and AND:");
+  println();
+
+  if ((0 && 1) || (1 && 0)) {
+    print((int*) "error 0 && 1|| 1 && 0");
+    println();
+  }
+
+  if ((0 || 1) && (1 || 0)) {
+    print((int*) "(0 || 1) && (1 || 0) = true");
+    println();
+  }
+
+  if ((0 || 0) && (1 || 0)) {
+    print((int*) "error (0 || 0) && (1 || 0)");
+    println();
+  }
+
+  if (0 && 1 || 1 && 1) {
+    print((int*) "0 && 1 || 1 && 1 = true");
+    println();
+  }
+
+  if (0 || !1 && 1) {
+    print((int*) "error 0 || !1 && 1 ");
+    println();
+  }
+
+  if (1 && 1|| 0) {
+    print((int*) "1 && 1|| 0 = true");
+    println();
+  } else {
+    print((int*) "error else 1 && 1 || 0");
     println();
   }
 
