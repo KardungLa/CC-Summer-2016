@@ -112,6 +112,7 @@ void printString(int* s);
 int roundUp(int n, int m);
 
 int* malloc(int size);
+void free(int* address);
 void exit(int code);
 
 // ------------------------ GLOBAL CONSTANTS -----------------------
@@ -349,6 +350,8 @@ int symbol;    // most recently recognized symbol
 
 int* sourceName = (int*) 0; // name of source file
 int sourceFD    = 0;        // file descriptor of open source file
+
+int freePtr = 0; // pointer to free memory, only used for symbolTableEntries
 
 // ------------------------- INITIALIZATION ------------------------
 
@@ -898,6 +901,9 @@ void implementOpen();
 void emitMalloc();
 void implementMalloc();
 
+void emitFree();
+void implementFree();
+
 // ------------------------ GLOBAL CONSTANTS -----------------------
 
 int debug_read   = 0;
@@ -912,6 +918,7 @@ int SYSCALL_WRITE  = 4004;
 int SYSCALL_OPEN   = 4005;
 
 int SYSCALL_MALLOC = 4045;
+int SYSCALL_FREE   = 4046;
 
 // -----------------------------------------------------------------
 // ----------------------- HYPSTER SYSCALLS ------------------------
@@ -1810,7 +1817,7 @@ int findNextCharacter() {
 }
 
 int isCharacterLetter() {
-  if (character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z'){
+  if (character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z') {
     return 1;
   } else
     return 0;
@@ -2851,7 +2858,7 @@ int gr_factor(int* constantVal) {
 
   type = INT_T;
   // "!"
-  if (symbol == SYM_NOT){
+  if (symbol == SYM_NOT) {
     negation = 1;
     getSymbol();
   }
@@ -2879,7 +2886,7 @@ int gr_factor(int* constantVal) {
         getSymbol();
       else
         syntaxErrorSymbol(SYM_RPARENTHESIS);
-        // if(!x && !(xx && aa))
+      // if(!x && !(xx && aa))
       // not a cast: "(" expression ")"
     } else if (symbol == SYM_STRUCT) {
       hasCast = 1;
@@ -2910,7 +2917,7 @@ int gr_factor(int* constantVal) {
       }
 
       if (negation) {
-        if(*(constantVal + 2) != 0) {
+        if (*(constantVal + 2) != 0) {
           negationTemp = *(constantVal + 3);
           *(constantVal + 3) = *(constantVal + 2);
           *(constantVal + 2) = negationTemp;
@@ -3025,7 +3032,7 @@ int gr_factor(int* constantVal) {
     //pass value up to gr_term for constant folding
     *(constantVal) = 1;
 
-    if (negation){
+    if (negation) {
       negation = 0;
       if (literal == 0)
         *(constantVal + 1) = 1;
@@ -4874,6 +4881,7 @@ void gr_procedure(int* procedure, int returnType) {
   int localVariables;
   int functionStart;
   int* entry;
+  int* nextEntry;
 
   currentProcedureName = procedure;
 
@@ -4995,6 +5003,14 @@ void gr_procedure(int* procedure, int returnType) {
 
   } else
     syntaxErrorUnexpected();
+
+  // free Symbol Table
+  while (local_symbol_table != (int*)0) {
+    nextEntry = getNextEntry(local_symbol_table);
+    free(local_symbol_table);
+    local_symbol_table = nextEntry;
+  }
+
 
   local_symbol_table = (int*) 0;
 
@@ -5339,6 +5355,7 @@ void selfie_compile() {
   emitWrite();
   emitOpen();
   emitMalloc();
+  emitFree();
 
   emitID();
   emitCreate();
@@ -6254,6 +6271,9 @@ void emitMalloc() {
 void implementMalloc() {
   int size;
   int bump;
+  int symbolTableEntrySize;
+
+  symbolTableEntrySize = 4 * SIZEOFINTSTAR + 8 * SIZEOFINT;
 
   if (debug_malloc) {
     print(binaryName);
@@ -6265,24 +6285,77 @@ void implementMalloc() {
 
   size = roundUp(*(registers + REG_A0), WORDSIZE);
 
-  bump = brk;
+  if (size == symbolTableEntrySize && freePtr != 0) {
 
-  if (bump + size >= *(registers + REG_SP))
-    throwException(EXCEPTION_HEAPOVERFLOW, 0);
-  else {
-    *(registers + REG_V0) = bump;
-
-    brk = bump + size;
+    *(registers + REG_V0) = (int) freePtr;
+    freePtr = loadVirtualMemory(pt, freePtr);
 
     if (debug_malloc) {
       print(binaryName);
-      print((int*) ": actually mallocating ");
+      print((int*) ": reusing ");
       print(itoa(size, string_buffer, 10, 0, 0));
-      print((int*) " bytes at virtual address ");
-      print(itoa(bump, string_buffer, 16, 8, 0));
+      print((int*) " bytes freed of memory at virtual address ");
+      print(itoa(*(registers + REG_V0), string_buffer, 16, 8, 0));
       println();
     }
+
+  } else {
+
+    bump = brk;
+
+    if (bump + size >= *(registers + REG_SP))
+      throwException(EXCEPTION_HEAPOVERFLOW, 0);
+    else {
+      *(registers + REG_V0) = bump;
+
+      brk = bump + size;
+
+      if (debug_malloc) {
+        print(binaryName);
+        print((int*) ": actually mallocating ");
+        print(itoa(size, string_buffer, 10, 0, 0));
+        print((int*) " bytes at virtual address ");
+        print(itoa(bump, string_buffer, 16, 8, 0));
+        println();
+      }
+    }
   }
+}
+
+void emitFree() {
+  createSymbolTableEntry(LIBRARY_TABLE, (int*) "free", 0, PROCEDURE, VOID_T, 0, binaryLength, 0, 0);
+
+  emitIFormat(OP_LW, REG_SP, REG_A0, 0); // size
+  emitIFormat(OP_ADDIU, REG_SP, REG_SP, WORDSIZE);
+
+  emitIFormat(OP_ADDIU, REG_ZR, REG_V0, SYSCALL_FREE);
+  emitRFormat(OP_SPECIAL, 0, 0, 0, FCT_SYSCALL);
+
+  emitRFormat(OP_SPECIAL, REG_RA, 0, 0, FCT_JR);
+}
+
+void implementFree() {
+
+  if (debug_malloc) {
+    print(binaryName);
+    print((int*) ": trying to free entry at address ");
+    print(itoa(*(registers + REG_A0), string_buffer, 10, 0, 0));
+    println();
+  }
+
+  storeVirtualMemory(pt, *(registers + REG_A0), freePtr);
+  freePtr = *(registers + REG_A0);
+
+  if (debug_malloc) {
+    print(binaryName);
+    print((int*) "Freeing one symboltable entry at virtual address ");
+    print(itoa((int) * (registers + REG_A0), string_buffer, 16, 0, 0));
+    println();
+  }
+
+  *(registers + REG_V0) = 0;
+
+
 }
 
 // -----------------------------------------------------------------
@@ -6746,6 +6819,8 @@ void fct_syscall() {
       implementOpen();
     else if (*(registers + REG_V0) == SYSCALL_MALLOC)
       implementMalloc();
+    else if (*(registers + REG_V0) == SYSCALL_FREE)
+      implementFree();
     else if (*(registers + REG_V0) == SYSCALL_ID)
       implementID();
     else if (*(registers + REG_V0) == SYSCALL_CREATE)
@@ -8531,7 +8606,7 @@ int main(int argc, int* argv) {
     println();
   }
 
-  if (1 && 1|| 0) {
+  if (1 && 1 || 0) {
     print((int*) "1 && 1|| 0 = true");
     println();
   } else {
