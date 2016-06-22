@@ -911,6 +911,7 @@ int debug_write  = 0;
 int debug_open   = 0;
 
 int debug_malloc = 0;
+int debug_free = 0;
 
 int SYSCALL_EXIT   = 4001;
 int SYSCALL_READ   = 4003;
@@ -6272,6 +6273,7 @@ void implementMalloc() {
   int size;
   int bump;
   int symbolTableEntrySize;
+  int address;
 
   symbolTableEntrySize = 4 * SIZEOFINTSTAR + 8 * SIZEOFINT;
 
@@ -6285,10 +6287,12 @@ void implementMalloc() {
 
   size = roundUp(*(registers + REG_A0), WORDSIZE);
 
-  if (size == symbolTableEntrySize && freePtr != 0) {
+  if (freePtr != 0 && size == symbolTableEntrySize) {
+
+    address = loadVirtualMemory(pt, freePtr);
 
     *(registers + REG_V0) = (int) freePtr;
-    freePtr = loadVirtualMemory(pt, freePtr);
+    freePtr = address;
 
     if (debug_malloc) {
       print(binaryName);
@@ -6336,7 +6340,7 @@ void emitFree() {
 
 void implementFree() {
 
-  if (debug_malloc) {
+  if (debug_free) {
     print(binaryName);
     print((int*) ": trying to free entry at address ");
     print(itoa(*(registers + REG_A0), string_buffer, 10, 0, 0));
@@ -6346,7 +6350,7 @@ void implementFree() {
   storeVirtualMemory(pt, *(registers + REG_A0), freePtr);
   freePtr = *(registers + REG_A0);
 
-  if (debug_malloc) {
+  if (debug_free) {
     print(binaryName);
     print((int*) "Freeing one symboltable entry at virtual address ");
     print(itoa((int) * (registers + REG_A0), string_buffer, 16, 0, 0));
@@ -6354,8 +6358,6 @@ void implementFree() {
   }
 
   *(registers + REG_V0) = 0;
-
-
 }
 
 // -----------------------------------------------------------------
