@@ -292,23 +292,6 @@ int SYM_AND          = 36; // &&
 
 int SYMBOLS[37][2];
 
-int globalarray1dim[10];
-int globalarray2dim[10][2];
-
-struct globalstruct1 {
-  int a;
-  int b;
-};
-
-struct globalstruct {
-  int a;
-  int b;
-  int* aa;
-  int array1[10];
-  int array2[10][2];
-  struct globalstruct* next;
-};
-
 struct symTableEntry {
   struct symTableEntry* next;
   int* string;
@@ -323,8 +306,6 @@ struct symTableEntry {
   int* refType;
   int* nextField;
 };
-
-struct globalstruct* next;
 
 int maxIdentifierLength = 64; // maximum number of characters in an identifier
 int maxIntegerLength    = 10; // maximum number of characters in an integer
@@ -533,7 +514,7 @@ int STRING    = 3;
 int INT_T        = 1;
 int INTSTAR_T    = 2;
 int VOID_T       = 3;
-int ARRAY_T   = 4;
+int ARRAY_T      = 4;
 int STRUCT_T     = 5;
 int STRUCTSTAR_T = 6;
 
@@ -638,7 +619,6 @@ void fixRegisterInitialization();
 
 void selfie_compile();
 void printSymbolsOccurrences();
-void printSymbolTable();
 
 // *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~ *~*~
 // -----------------------------------------------------------------
@@ -1822,18 +1802,6 @@ int isCharacterLetter() {
     return 1;
   } else
     return 0;
-  // if (character >= 'a')
-  //   if (character <= 'z')
-  //     return 1;
-  //   else
-  //     return 0;
-  // else if (character >= 'A')
-  //   if (character <= 'Z')
-  //     return 1;
-  //   else
-  //     return 0;
-  // else
-  //   return 0;
 }
 
 int isCharacterDigit() {
@@ -3223,14 +3191,12 @@ int gr_term(int* constantVal) {
 
 
   if (prevType == 0) {
-    // 1
     *(constantVal) = 1;
     *(constantVal + 1) = constantTemp;
   } else {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
   }
-
 
   // assert: allocatedTemporaries == n + 1
 
@@ -3325,9 +3291,7 @@ int gr_simpleExpression(int* constantVal) {
           constantTemp = constantTemp - *(constantVal + 1);
         }
       } else {
-        if (prevType == 0) {
-
-        } else {
+        if (prevType == 1) {
           // x+1
           constantTemp = *(constantVal + 1);
           load_integer(constantTemp);
@@ -3349,7 +3313,6 @@ int gr_simpleExpression(int* constantVal) {
             emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SUBU);
           }
           tfree(1);
-          prevType = 1;
         }
       }
     } else {
@@ -3409,7 +3372,6 @@ int gr_simpleExpression(int* constantVal) {
   // assert: allocatedTemporaries == n + 1
 
   if (prevType == 0) {
-    // 1
     *(constantVal) = 1;
     *(constantVal + 1) = constantTemp;
   } else {
@@ -3466,9 +3428,7 @@ int gr_shiftExpression(int* constantVal) {
           constantTemp = constantTemp >> *(constantVal + 1);
         }
       } else {
-        if (prevType == 0) {
-
-        } else {
+        if (prevType == 1) {
           // x+1
           constantTemp = *(constantVal + 1);
           load_integer(constantTemp);
@@ -3479,7 +3439,6 @@ int gr_shiftExpression(int* constantVal) {
             emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
           }
           tfree(1);
-          prevType = 1;
         }
       }
     } else {
@@ -3502,21 +3461,23 @@ int gr_shiftExpression(int* constantVal) {
           emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SRLV);
         }
         tfree(1);
-        prevType = 1;
       }
     }
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
   }
-  // assert: allocatedTemporaries == n + 1
+
+
   if (prevType == 0) {
-    // 1
     *(constantVal) = 1;
     *(constantVal + 1) = constantTemp;
   } else {
     *(constantVal) = 0;
     *(constantVal + 1) = 0;
   }
+
+  // assert: allocatedTemporaries == n + 1
+
   return ltype;
 }
 
@@ -3573,7 +3534,6 @@ int gr_compareExpression(int* constantVal) {
           }
         } else {
           load_integer(*(constantVal + 1));
-          prevType = 1;
         }
       } else {
         if (prevType == 0) {
@@ -3662,8 +3622,6 @@ int gr_compareExpression(int* constantVal) {
           tfree(1);
 
         } else {
-          prevType = 1;
-
           // set to 1 if a < b, else 0
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
 
@@ -3701,22 +3659,14 @@ int gr_compareExpression(int* constantVal) {
           // set to 1 if b < a, else 0
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
 
-
           tfree(1);
-
         } else {
-          prevType = 1;
-
           // set to 1 if b < a, else 0
           emitRFormat(OP_SPECIAL, currentTemporary(), previousTemporary(), previousTemporary(), FCT_SLT);
 
-
           tfree(1);
-
         }
       }
-
-
     } else if (operatorSymbol == SYM_LEQ) {
 
       if (*(constantVal) == 1) {
@@ -3769,7 +3719,6 @@ int gr_compareExpression(int* constantVal) {
           emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 1);
           emitIFormat(OP_BEQ, REG_ZR, REG_ZR, 2);
           emitIFormat(OP_ADDIU, REG_ZR, currentTemporary(), 0);
-          prevType = 1;
         }
       }
 
@@ -3788,7 +3737,6 @@ int gr_compareExpression(int* constantVal) {
           }
         } else {
           load_integer(*(constantVal + 1));
-          prevType = 1;
 
           // if a < b set 0, else 1
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
@@ -3818,7 +3766,6 @@ int gr_compareExpression(int* constantVal) {
 
 
         } else {
-          prevType = 1;
           // if a < b set 0, else 1
           emitRFormat(OP_SPECIAL, previousTemporary(), currentTemporary(), previousTemporary(), FCT_SLT);
 
@@ -3898,7 +3845,6 @@ int gr_andExpression(int* constantVal) {
       while (*(thead + 1) != 0) {
         fixup_relative(*thead);
         thead = (int*) * (thead + 1);
-        //tfree(1);
       }
       fixup_relative(*thead);
     }
@@ -3972,7 +3918,6 @@ int gr_expression(int* constantVal) {
       while (*(fhead + 1) != 0) {
         fixup_relative(*fhead);
         fhead = (int*) * (fhead + 1);
-        //tfree(1);
       }
       fixup_relative(*fhead);
     }
@@ -4141,7 +4086,6 @@ void gr_if() {
         // zero or more statements: { statement }
         if (symbol == SYM_LBRACE) {
           getSymbol();
-          //????!
 
           while (isNotRbraceOrEOF())
             gr_statement();
@@ -5124,7 +5068,6 @@ void gr_cstar() {
                 fields = fields + 1;
               }
 
-
               if (type == STRUCTSTAR_T) {
                 createStructTableEntry(entry, identifier, lineNumber, VARIABLE, type, 0, -fields * WORDSIZE, size1d, size2d);
                 setRefType(searchStructTable(entry, identifier, VARIABLE), getSymbolTableEntry(entryString, VARIABLE));
@@ -5209,8 +5152,6 @@ void gr_cstar() {
             } else {
               createSymbolTableEntry(GLOBAL_TABLE, variableOrProcedureName, lineNumber, VARIABLE, type, 0, -allocatedMemory, 1, 1);
             }
-
-
 
             getSymbol();
 
@@ -5393,46 +5334,6 @@ void printSymbolsOccurrences() {
     println();
 
     c = c + 1;
-  }
-
-}
-
-void printSymbolTable() {
-  int* entry;
-  int* field;
-
-  entry = global_symbol_table;
-
-  print((int*) "Global Symboltable: ");
-  print((int*) " : ");
-  while ((int) entry != 0) {
-    if (getClass(entry) == VARIABLE) {
-      print((int*) getString(entry));
-      print((int*) ": ");
-      // print(itoa(getAddress(entry), string_buffer, 10, 0, 0));
-      // print((int*) ": ");
-      // print(itoa(getScope(entry), string_buffer, 10, 0, 0));
-      // print((int*) ": ");
-      // print(itoa(getSize(entry), string_buffer, 10, 0, 0));
-      print((int*) ": RefType: ");
-      //print(itoa(getRefType(entry), string_buffer, 10, 0, 0));
-      print((int*)getRefType(entry));
-      // print((int*) ": ");
-      // print(itoa(getNextField(entry), string_buffer, 10, 0, 0));
-      println();
-      if (getNextField(entry) != (int*) 0) {
-        field = getNextField(entry);
-        print((int*) "Printing Members: ");
-        println();
-        while (field != (int*) 0) {
-          print((int*) getString(field));
-          println();
-          field = getNextField(field);
-        }
-      }
-    }
-
-    entry = getNextEntry(entry);
   }
 
 }
@@ -8329,9 +8230,6 @@ int selfie(int argc, int* argv) {
         // print out occurrences for symbols
         //printSymbolsOccurrences();
 
-        // print out symbol table
-        //printSymbolTable();
-
       } else if (stringCompare((int*) *argv, (int*) "-o")) {
         binaryName = (int*) * (argv + 1);
 
@@ -8447,43 +8345,7 @@ int selfie(int argc, int* argv) {
   return 0;
 }
 
-void globalarraystest(int i) {
-  globalarray1dim[0] = 43;
-  globalarray1dim[i] = 43;
-
-  globalarray2dim[0][0] = 43;
-  globalarray2dim[i][0] = 43;
-  globalarray2dim[i][i] = 43;
-  globalarray2dim[0][i] = 43;
-}
-
-void array1dimtest(int i, int arr1[10]) {
-  arr1[0] = 43;
-  arr1[i] = 43;
-}
-
-void array2dimtest(int i, int arr1[10][10]) {
-  arr1[0][0] = 43;
-  arr1[0][i] = 43;
-  arr1[i][i] = 43;
-  arr1[i][0] = 43;
-}
-
-void structTest(struct symTableEntry* entry) {
-  entry->string = (int*) "method called";
-}
-
 int main(int argc, int* argv) {
-  // array index
-  int i;
-  int s;
-
-  struct globalstruct* teststruct;
-  struct symTableEntry* st;
-
-  int array1dim[10];
-  int array2dim[10][10];
-
   initLibrary();
 
   initScanner();
@@ -8499,140 +8361,6 @@ int main(int argc, int* argv) {
   argv = argv + 1;
 
   print((int*) "This is USEG Selfie");
-  println();
-
-  print((int*) "Test case for AND");
-  println();
-
-  if (!(0 && 1)) {
-    print((int*) "!(0 && 1) = true");
-    println();
-  }
-
-  if (!0 && 1) {
-    print((int*) "!0 && 1 = true");
-    println();
-  }
-
-  if (1 && 0) {
-    print((int*) "error 1 && 0");
-    println();
-  }
-
-  if (1 && 1) {
-    print((int*) "1 && 1 = true");
-    println();
-  }
-
-  if (1 && 1 && 0) {
-    print((int*) "error 1 && 1 && 0");
-    println();
-  }
-
-  if (1 && 1 && 1) {
-    print((int*) "1 && 1 && 1 = true");
-    println();
-  }
-
-  if (1 && 0 && 1) {
-    print((int*) "error 1 && 0 && 1");
-    println();
-  }
-
-  print((int*) "Test case for OR");
-  println();
-
-  if (0 || 0) {
-    print((int*) "error 0 || 0");
-    println();
-  }
-
-  if (0 || 1) {
-    print((int*) "0 || 1 = true");
-    println();
-  }
-
-  if (0 || !1) {
-    print((int*) "error 0 || !1");
-    println();
-  }
-
-  if (1 || 0) {
-    print((int*) "1 || 0 = true");
-    println();
-  } else {
-    print((int*) "error 1 || 0");
-    println();
-  }
-
-  if (1 || 1) {
-    print((int*) "1 || 1 = true");
-    println();
-  }
-
-  if (0 || 0 || 0) {
-    print((int*) "error 0 || 0 || 0");
-    println();
-  }
-
-  if (1 || 1 || 1) {
-    print((int*) "1 || 1 || 1 = true");
-    println();
-  }
-
-  print((int*) "Combining OR and AND:");
-  println();
-
-  if ((0 && 1) || (1 && 0)) {
-    print((int*) "error 0 && 1|| 1 && 0");
-    println();
-  }
-
-  if ((0 || 1) && (1 || 0)) {
-    print((int*) "(0 || 1) && (1 || 0) = true");
-    println();
-  }
-
-  if ((0 || 0) && (1 || 0)) {
-    print((int*) "error (0 || 0) && (1 || 0)");
-    println();
-  }
-
-  if (0 && 1 || 1 && 1) {
-    print((int*) "0 && 1 || 1 && 1 = true");
-    println();
-  }
-
-  if (0 || !1 && 1) {
-    print((int*) "error 0 || !1 && 1 ");
-    println();
-  }
-
-  if (1 && 1 || 0) {
-    print((int*) "1 && 1|| 0 = true");
-    println();
-  } else {
-    print((int*) "error else 1 && 1 || 0");
-    println();
-  }
-
-  print((int*) "Test case for structs");
-  println();
-
-  teststruct = (struct globalstruct*) malloc(34 * SIZEOFINT);
-  st = (struct symTableEntry*) malloc(4 * SIZEOFINTSTAR + 8 * SIZEOFINT);
-
-  teststruct->a = 1;
-  teststruct->b = 42;
-  st->string = (int*) "initial value";
-
-  print((int*) " before method call : ");
-  print((int*)st->string);
-  println();
-
-  structTest(st);
-  print((int*) " after method call : ");
-  print((int*)st->string);
   println();
 
   if (selfie(argc, (int*) argv) != 0) {
